@@ -35,6 +35,18 @@ The Hub manages repositories, environment checks, builds, test deployment, verif
 - Shared starter/foundation: `EliteMay/aviutl-plugin-foundation`
 - Plugin source: one repository per plugin
 
+## Download
+
+通常利用では **GitHub Releases の Latest から Setup.exe をダウンロード**します。
+
+- Actions の Artifact を開く必要はありません。
+- ZIP 展開も不要です。
+- Setup.exe を実行してインストールします。
+- Hub 本体の更新も GitHub Releases を基準にします。
+
+Latest Release:
+https://github.com/EliteMay/video-plugin-dev-hub/releases/latest
+
 ## Development
 
 ```powershell
@@ -43,7 +55,7 @@ npm test
 npm run dev
 ```
 
-Windows installer:
+ローカルでWindows installerを作る場合:
 
 ```powershell
 npm run build:win
