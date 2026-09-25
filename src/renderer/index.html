@@ -26,9 +26,9 @@
     <main>
       <header>
         <div>
-          <p class="eyebrow">PHASE 4</p>
+          <p class="eyebrow">PHASE 5</p>
           <h1>Video Plugin Dev Hub</h1>
-          <p class="muted">Plugin Repositoryの同期・環境確認・BuildまでHub内で進められます。</p>
+          <p class="muted">PluginのBuildから分離テスト環境への導入・起動までHub内で進められます。</p>
         </div>
         <span class="pill" id="network">確認中</span>
       </header>
@@ -113,13 +113,26 @@
           </div>
         </div>
         <p class="muted" id="environmentMessage"></p>
+
+        <div class="test-environment-bar">
+          <div>
+            <p class="eyebrow">TEST ENVIRONMENT</p>
+            <h2>分離したAviUtl2</h2>
+          </div>
+          <select id="testEnvironmentSelect" class="task-select">
+            <option value="">Test Environment未作成</option>
+          </select>
+          <button class="secondary" type="button" id="createTestEnvironment">Test Environmentを作成</button>
+          <button class="primary" type="button" id="launchTestEnvironment" disabled>AviUtl2を起動</button>
+        </div>
+        <p class="muted" id="runtimeStatus">普段使いの環境とは別のdataフォルダで確認します。</p>
       </section>
 
       <section class="card large">
         <div class="row">
           <div>
             <p class="eyebrow">CURRENT TASK</p>
-            <h2>Build Foundation</h2>
+            <h2>Test Deploy Foundation</h2>
           </div>
           <span class="pill good">実装中</span>
         </div>
@@ -132,6 +145,10 @@
           <li>✓ Debug / Release Build</li>
           <li>✓ Artifact SHA-256</li>
           <li>✓ Build履歴</li>
+          <li>✓ 分離Test Environment</li>
+          <li>✓ Managed Install / Uninstall</li>
+          <li>✓ Rollback</li>
+          <li>✓ AviUtl2起動監視</li>
         </ul>
         <button class="primary" id="updateButton">Hubの更新を確認</button>
         <span class="muted" id="updateStatus"></span>
