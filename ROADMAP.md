@@ -12,15 +12,15 @@
 - [x] Renderer recovery
 - [x] Offline/online indicator
 - [x] Stable updater foundation
-- [ ] Windows installer CI validation
+- [x] Windows installer CI validation
 - [ ] Windows real-machine verification
 
 ## Phase 2 — Projects / Git
 
-- [ ] Project registry
-- [ ] Repository validation
+- [x] Project registry
+- [x] Repository validation
 - [ ] Clone and safe sync
-- [ ] Local change explanation
+- [x] Local change explanation (basic status; detailed file explanations remain)
 - [ ] GitHub save flow
 - [ ] Roadmap parser and current task
 
