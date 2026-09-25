@@ -38,7 +38,15 @@ function errorText(error) {
     COMMIT_FAILED: "PC側へ変更履歴を保存できませんでした。",
     MERGE_CONFLICT: "GitHub側の変更と競合しました。PC側のCommitは保持しています。",
     PUSH_FAILED: "PC側へCommitしましたが、GitHubへの送信に失敗しました。",
-    PROJECT_NOT_FOUND: "Projectが見つかりません。"
+    PROJECT_NOT_FOUND: "Projectが見つかりません。",
+    REPOSITORY_NOT_TRUSTED: "Buildする前にRepositoryを信頼してください。",
+    MANIFEST_INVALID: "plugin-project.jsonを確認してください。",
+    CMAKE_NOT_AVAILABLE: "CMakeが見つかりません。",
+    UNSUPPORTED_BUILD_SYSTEM: "このBuild方式にはまだ対応していません。",
+    INVALID_CONFIGURATION: "Build構成が正しくありません。",
+    INVALID_RELATIVE_PATH: "Build Pathが安全な範囲外です。",
+    PATH_OUTSIDE_REPOSITORY: "Repository外のPathはBuildに使えません。",
+    BUILD_FAILED: "Buildに失敗しました。"
   };
   return messages[error] ?? "操作を完了できませんでした。";
 }
@@ -107,6 +115,28 @@ async function saveProject(project) {
   projectMessage.textContent = result.ok
     ? project.name + " をGitHubへ保存しました。"
     : errorText(result.error);
+  await renderProjects();
+}
+
+async function buildProject(project, configuration) {
+  projectMessage.textContent = project.name + " を " + configuration + " Buildしています…";
+  const result = await window.hub.buildProject(project.id, configuration);
+
+  if (!result.ok) {
+    projectMessage.textContent = errorText(result.error);
+    if (result.logs) {
+      window.alert("Build Log（末尾）\n\n" + String(result.logs).slice(-6000));
+    }
+    await renderProjects();
+    return;
+  }
+
+  const artifact = result.build?.artifact;
+  const artifactText = artifact
+    ? " / " + artifact.relativePath + " / SHA-256 " + artifact.sha256.slice(0, 12)
+    : " / Artifact未検出";
+  projectMessage.textContent =
+    project.name + " の " + configuration + " Buildが成功しました" + artifactText;
   await renderProjects();
 }
 
@@ -216,6 +246,9 @@ async function renderProjects() {
 
     info.append(title, repo, branch, pluginMeta, trustState, compatibility, taskSelect);
 
+    const historyResult = await window.hub.getBuildHistory(project.id);
+    const latestBuild = historyResult.ok ? historyResult.entries?.[0] : null;
+
     const state = document.createElement("div");
     state.className = "project-state";
     const stateText = document.createElement("span");
@@ -224,7 +257,17 @@ async function renderProjects() {
     const pathText = document.createElement("span");
     pathText.className = "project-meta";
     pathText.textContent = project.localPath;
-    state.append(stateText, pathText);
+    const buildText = document.createElement("span");
+    buildText.className = latestBuild?.ok ? "state-ok" : latestBuild ? "state-error" : "project-meta";
+    if (latestBuild?.ok) {
+      const hash = latestBuild.artifact?.sha256 ? " / " + latestBuild.artifact.sha256.slice(0, 10) : "";
+      buildText.textContent = "Build: 成功 " + latestBuild.configuration + hash;
+    } else if (latestBuild) {
+      buildText.textContent = "Build: 失敗 " + (latestBuild.configuration ?? "");
+    } else {
+      buildText.textContent = "Build: 未実行";
+    }
+    state.append(stateText, pathText, buildText);
 
     const actions = document.createElement("div");
     actions.className = "project-actions";
@@ -247,10 +290,24 @@ async function renderProjects() {
       }
     );
 
+    const debugButton = actionButton("Debug Build", () => buildProject(project, "Debug"));
+    const releaseButton = actionButton("Release Build", () => buildProject(project, "Release"));
+    const canBuild = project.trusted && project.manifestSummary?.valid;
+    debugButton.disabled = !canBuild;
+    releaseButton.disabled = !canBuild;
+    if (!canBuild) {
+      debugButton.title = project.trusted
+        ? "plugin-project.jsonを確認してください"
+        : "Repositoryを信頼するとBuildできます";
+      releaseButton.title = debugButton.title;
+    }
+
     actions.append(
       actionButton("安全に同期", () => syncProject(project)),
       actionButton("変更を見る", () => showChanges(project)),
       trustButton,
+      debugButton,
+      releaseButton,
       actionButton("GitHubに保存", () => saveProject(project), "primary")
     );
 
