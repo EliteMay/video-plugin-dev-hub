@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld("hub", {
   getStatus: () => ipcRenderer.invoke("hub:get-status"),
   getDiagnostics: () => ipcRenderer.invoke("hub:get-diagnostics"),
   getSettings: () => ipcRenderer.invoke("hub:get-settings"),
+  getEnvironment: () => ipcRenderer.invoke("hub:get-environment"),
+  chooseAviUtl2: () => ipcRenderer.invoke("hub:choose-aviutl2"),
   saveWindowPreference: (value) => ipcRenderer.invoke("hub:save-window-preference", value),
   listProjects: () => ipcRenderer.invoke("hub:list-projects"),
   chooseProjectFolder: () => ipcRenderer.invoke("hub:choose-project-folder"),
