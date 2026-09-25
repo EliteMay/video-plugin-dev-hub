@@ -196,3 +196,5 @@ input:focus { border-color: #59677c; }
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.state-error { color: #e6a3a3; }
