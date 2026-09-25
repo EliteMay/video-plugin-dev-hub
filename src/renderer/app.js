@@ -193,6 +193,12 @@ async function renderProjects() {
       taskSelect.disabled = true;
     }
 
+    const trustState = document.createElement("span");
+    trustState.className = project.trusted ? "state-ok" : "state-warn";
+    trustState.textContent = project.trusted
+      ? "実行許可: 信頼済み"
+      : "実行許可: 未信頼（Build/実行は停止）";
+
     const compatibility = document.createElement("span");
     const compatStatus = project.compatibility?.status ?? "unknown";
     compatibility.className = compatStatus === "ready-for-runtime-test"
@@ -208,7 +214,7 @@ async function renderProjects() {
     };
     compatibility.textContent = compatText[compatStatus] ?? "互換性: 未確認";
 
-    info.append(title, repo, branch, pluginMeta, compatibility, taskSelect);
+    info.append(title, repo, branch, pluginMeta, trustState, compatibility, taskSelect);
 
     const state = document.createElement("div");
     state.className = "project-state";
@@ -222,9 +228,29 @@ async function renderProjects() {
 
     const actions = document.createElement("div");
     actions.className = "project-actions";
+    const trustButton = actionButton(
+      project.trusted ? "信頼を解除" : "このRepositoryを信頼する",
+      async () => {
+        if (!project.trusted) {
+          const confirmed = window.confirm(
+            "このRepositoryのBuildやPlugin実行を許可します。\n\n" +
+            project.repositorySlug +
+            "\n\n内容を確認したRepositoryだけ信頼してください。"
+          );
+          if (!confirmed) return;
+        }
+        const result = await window.hub.setProjectTrust(project.id, !project.trusted);
+        projectMessage.textContent = result.ok
+          ? (result.trusted ? "Repositoryを信頼済みにしました。" : "Repositoryの信頼を解除しました。")
+          : "信頼設定を変更できませんでした。";
+        await renderProjects();
+      }
+    );
+
     actions.append(
       actionButton("安全に同期", () => syncProject(project)),
       actionButton("変更を見る", () => showChanges(project)),
+      trustButton,
       actionButton("GitHubに保存", () => saveProject(project), "primary")
     );
 
