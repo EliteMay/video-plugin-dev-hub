@@ -7,6 +7,8 @@ import { loadSettings, saveSettings } from "./core/settings.mjs";
 import { createLogger } from "./core/logger.mjs";
 import { createProject, loadProjects, saveProjects } from "./core/projects.mjs";
 import { getGitVersion, inspectRepository } from "./core/git.mjs";
+import { cloneRepository, safeSync } from "./core/git-sync.mjs";
+import { previewSave, saveToGitHub } from "./core/git-save.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 nativeTheme.themeSource = "dark";
@@ -174,6 +176,7 @@ ipcMain.handle("hub:add-project", async (_event, input) => {
     if (normalizedOrigin && normalizedOrigin !== project.repositoryUrl.toLowerCase()) {
       return { ok: false, error: "ORIGIN_MISMATCH", gitState };
     }
+    project.defaultBranch = gitState.branch || "main";
     projectStore.projects.push(project);
     projectStore = saveProjects(projectsPath, projectStore);
     logger.write("info", "Project registered", { repositorySlug: project.repositorySlug });
@@ -187,6 +190,52 @@ ipcMain.handle("hub:inspect-project", async (_event, projectId) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
   return { ok: true, project, gitState: await inspectRepository(project.localPath) };
+});
+
+ipcMain.handle("hub:clone-project", async (_event, input) => {
+  try {
+    const project = createProject(input ?? {});
+    if (projectStore.projects.some(item => item.id === project.id)) {
+      return { ok: false, error: "ALREADY_REGISTERED" };
+    }
+    const cloned = await cloneRepository(project.repositoryUrl, project.localPath);
+    if (!cloned.ok) return cloned;
+    project.defaultBranch = cloned.state.branch || "main";
+    projectStore.projects.push(project);
+    projectStore = saveProjects(projectsPath, projectStore);
+    logger.write("info", "Project cloned and registered", { repositorySlug: project.repositorySlug });
+    return { ok: true, project: { ...project, gitState: cloned.state } };
+  } catch (error) {
+    return { ok: false, error: error?.message ?? "CLONE_FAILED" };
+  }
+});
+
+ipcMain.handle("hub:sync-project", async (_event, projectId) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  const result = await safeSync(project);
+  logger.write(result.ok ? "info" : "warn", "Project sync", {
+    repositorySlug: project.repositorySlug,
+    result: result.ok ? "success" : result.error
+  });
+  return result;
+});
+
+ipcMain.handle("hub:preview-save", async (_event, projectId) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  return previewSave(project);
+});
+
+ipcMain.handle("hub:save-project", async (_event, projectId, commitMessage) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  const result = await saveToGitHub(project, commitMessage);
+  logger.write(result.ok ? "info" : "warn", "Project save", {
+    repositorySlug: project.repositorySlug,
+    result: result.ok ? "success" : result.error
+  });
+  return result;
 });
 
 ipcMain.handle("hub:check-for-updates", async () => {
