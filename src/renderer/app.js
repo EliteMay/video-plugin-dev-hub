@@ -139,7 +139,39 @@ async function renderProjects() {
     const branch = document.createElement("span");
     branch.className = "project-meta";
     branch.textContent = "Branch: " + (project.gitState?.branch || project.defaultBranch || "不明");
-    info.append(title, repo, branch);
+
+    const taskSelect = document.createElement("select");
+    taskSelect.className = "task-select";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = project.roadmapSummary?.found
+      ? "今やるタスクを選択"
+      : "Roadmapが見つかりません";
+    taskSelect.append(placeholder);
+
+    if (project.roadmapSummary?.found) {
+      const roadmapResult = await window.hub.getRoadmap(project.id);
+      for (const task of roadmapResult.roadmap?.tasks ?? []) {
+        if (task.completed) continue;
+        const option = document.createElement("option");
+        option.value = task.key;
+        option.textContent = task.text;
+        option.selected = task.key === (roadmapResult.currentTaskKey ?? project.currentTask?.key);
+        taskSelect.append(option);
+      }
+      taskSelect.addEventListener("change", async () => {
+        if (!taskSelect.value) return;
+        const result = await window.hub.setCurrentTask(project.id, taskSelect.value);
+        projectMessage.textContent = result.ok
+          ? project.name + " の今やるタスクを変更しました。"
+          : "タスクを選択できませんでした。";
+        await renderProjects();
+      });
+    } else {
+      taskSelect.disabled = true;
+    }
+
+    info.append(title, repo, branch, taskSelect);
 
     const state = document.createElement("div");
     state.className = "project-state";
