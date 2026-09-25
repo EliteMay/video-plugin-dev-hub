@@ -16,7 +16,7 @@
         <button class="nav" disabled>新規作成</button>
         <div class="sep"></div>
         <button class="nav" disabled>開発</button>
-        <button class="nav" disabled>ChatGPT連携</button>
+        <button class="nav" id="chatgptButton">ChatGPT連携</button>
         <button class="nav" id="diagnosticsButton">診断</button>
         <button class="nav" disabled>設定</button>
       </nav>
@@ -149,6 +149,24 @@
           <button class="primary" type="button" id="saveVerification">確認結果を保存</button>
           <span class="muted" id="verificationMessage"></span>
         </div>
+      </section>
+
+      <section class="card large" id="chatgptPanel">
+        <div class="row">
+          <div>
+            <p class="eyebrow">CHATGPT HANDOFF</p>
+            <h2>ChatGPT連携</h2>
+          </div>
+          <span class="pill">1回でまとめる</span>
+        </div>
+        <p class="muted">Repository状態、Build、Test導入、実機確認、Evidence画像、直近ログをまとめます。Source本文やTokenは自動収集しません。</p>
+        <div class="share-row">
+          <select id="chatgptProjectSelect" class="task-select">
+            <option value="">Projectを選択</option>
+          </select>
+          <button class="primary" type="button" id="createSharePack" disabled>ChatGPT共有パックを作る</button>
+        </div>
+        <p class="muted" id="sharePackMessage"></p>
       </section>
 
       <section class="card large">
