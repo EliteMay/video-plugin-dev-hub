@@ -19,12 +19,21 @@ export function findRoadmapFile(repositoryPath) {
   return null;
 }
 
+function digest(value, length = 16) {
+  return crypto.createHash("sha256").update(value).digest("hex").slice(0, length);
+}
+
 function taskKey(source, line, text) {
-  return crypto
-    .createHash("sha256")
-    .update(source + ":" + line + ":" + text)
-    .digest("hex")
-    .slice(0, 16);
+  return digest(source + ":" + line + ":" + text);
+}
+
+function taskSignature(task) {
+  return digest(JSON.stringify({
+    text: task.text,
+    owner: task.owner ?? null,
+    steps: task.steps ?? [],
+    completion: task.completion ?? null
+  }), 24);
 }
 
 export function parseRoadmapText(text, source = "ROADMAP.md") {
@@ -32,32 +41,69 @@ export function parseRoadmapText(text, source = "ROADMAP.md") {
   const hasCheckbox = lines.some(line => /^\s*[-*]\s+\[[ xX]\]\s+/.test(line));
   const tasks = [];
 
-  lines.forEach((line, index) => {
-    let match;
-    if (hasCheckbox) {
-      match = line.match(/^\s*[-*]\s+\[([ xX])\]\s+(.+?)\s*$/);
+  if (hasCheckbox) {
+    let current = null;
+
+    lines.forEach((line, index) => {
+      const match = line.match(/^(\s*)[-*]\s+\[([ xX])\]\s+(.+?)\s*$/);
+      if (match) {
+        const textValue = match[3].trim();
+        current = {
+          key: taskKey(source, index + 1, textValue),
+          text: textValue,
+          completed: match[2].toLowerCase() === "x",
+          line: index + 1,
+          indent: match[1].length,
+          owner: null,
+          steps: [],
+          completion: null
+        };
+        tasks.push(current);
+        return;
+      }
+
+      if (!current) return;
+      const bullet = line.match(/^(\s+)[-*]\s+(.+?)\s*$/);
+      if (!bullet || bullet[1].length <= current.indent) return;
+
+      const value = bullet[2].trim();
+      const ownerMatch = value.match(/^担当\s*[:：]\s*(.+)$/);
+      if (ownerMatch) {
+        current.owner = ownerMatch[1].trim();
+        return;
+      }
+
+      const completionMatch = value.match(/^完了条件\s*[:：]\s*(.+)$/);
+      if (completionMatch) {
+        current.completion = completionMatch[1].trim();
+        return;
+      }
+
+      current.steps.push(value);
+    });
+
+    for (const task of tasks) {
+      task.signature = taskSignature(task);
+      delete task.indent;
+    }
+  } else {
+    lines.forEach((line, index) => {
+      const match = line.match(/^\s*[-*]\s+(.+?)\s*$/);
       if (!match) return;
-      const completed = match[1].toLowerCase() === "x";
-      const textValue = match[2].trim();
-      tasks.push({
+      const textValue = match[1].trim();
+      const task = {
         key: taskKey(source, index + 1, textValue),
         text: textValue,
-        completed,
-        line: index + 1
-      });
-      return;
-    }
-
-    match = line.match(/^\s*[-*]\s+(.+?)\s*$/);
-    if (!match) return;
-    const textValue = match[1].trim();
-    tasks.push({
-      key: taskKey(source, index + 1, textValue),
-      text: textValue,
-      completed: false,
-      line: index + 1
+        completed: false,
+        line: index + 1,
+        owner: null,
+        steps: [],
+        completion: null
+      };
+      task.signature = taskSignature(task);
+      tasks.push(task);
     });
-  });
+  }
 
   return {
     source,
