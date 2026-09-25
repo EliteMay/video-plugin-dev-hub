@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version and check Release
+        id: release_check
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tag = "v$version"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            "exists=true" >> $env:GITHUB_OUTPUT
+            Write-Host "$tag is already published. Nothing to do."
+          } else {
+            "exists=false" >> $env:GITHUB_OUTPUT
+            Write-Host "$tag will be built and published."
+          }
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/setup-node@v4
+        if: steps.release_check.outputs.exists != 'true'
+        with:
+          node-version: "22.12.0"
+
+      - name: Install dependencies
+        if: steps.release_check.outputs.exists != 'true'
+        run: npm install
+
+      - name: Unit tests
+        if: steps.release_check.outputs.exists != 'true'
+        run: npm test
+
+      - name: Build Windows installer
+        if: steps.release_check.outputs.exists != 'true'
+        run: npm run build:win
+
+      - name: Validate Release files
+        if: steps.release_check.outputs.exists != 'true'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist -File | Where-Object { $_.Name -like "*setup.exe" }
+          $blockmap = Get-ChildItem dist -File | Where-Object { $_.Name -like "*.blockmap" }
+          $latest = Get-Item "dist/latest.yml" -ErrorAction SilentlyContinue
+
+          if (-not $setup) { throw "Setup.exe was not generated." }
+          if (-not $blockmap) { throw "blockmap was not generated." }
+          if (-not $latest) { throw "latest.yml was not generated." }
+
+          Write-Host "Release files are complete."
+
+      - name: Publish GitHub Release
+        if: steps.release_check.outputs.exists != 'true'
+        shell: pwsh
+        run: |
+          $assets = @()
+          $assets += Get-ChildItem dist -File | Where-Object {
+            $_.Name -like "*setup.exe" -or
+            $_.Name -like "*.blockmap" -or
+            $_.Name -eq "latest.yml"
+          } | ForEach-Object { $_.FullName }
+
+          & gh release create "${{ steps.release_check.outputs.tag }}" @assets `
+            --repo "$env:GITHUB_REPOSITORY" `
+            --target "${{ github.sha }}" `
+            --title "Video Plugin Dev Hub ${{ steps.release_check.outputs.tag }}" `
+            --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
