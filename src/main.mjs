@@ -15,6 +15,9 @@ import { compatibilityState, readPluginManifest } from "./core/plugin-manifest.m
 import { isRepositoryTrusted, loadTrust, saveTrust, setRepositoryTrust } from "./core/trust.mjs";
 import { buildCmakeProject } from "./core/build.mjs";
 import { appendBuildHistory, loadBuildHistory } from "./core/build-history.mjs";
+import { createTestEnvironment, loadEnvironments, saveEnvironments } from "./core/test-environments.mjs";
+import { getInstallState, installArtifact, rollbackInstall, uninstallManagedFiles } from "./core/deploy.mjs";
+import { launchAviUtl2 } from "./core/runtime.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 nativeTheme.themeSource = "dark";
@@ -30,7 +33,10 @@ let projectsPath;
 let projectStore;
 let trustPath;
 let trustStore;
+let environmentsPath;
+let environmentStore;
 let logger;
+const runtimeProcesses = new Map();
 
 function clampWindow(win) {
   const bounds = win.getBounds();
@@ -107,9 +113,11 @@ app.whenReady().then(() => {
   settingsPath = path.join(dataRoot, "settings.json");
   projectsPath = path.join(dataRoot, "projects.json");
   trustPath = path.join(dataRoot, "trust.json");
+  environmentsPath = path.join(dataRoot, "test-environments.json");
   settings = loadSettings(settingsPath);
   projectStore = loadProjects(projectsPath);
   trustStore = loadTrust(trustPath);
+  environmentStore = loadEnvironments(environmentsPath);
   logger = createLogger(path.join(dataRoot, "logs", "hub.log"));
   logger.write("info", "App ready", { version: app.getVersion() });
 
@@ -144,6 +152,7 @@ ipcMain.handle("hub:get-diagnostics", async () => ({
   network: { online: net.isOnline() },
   git: { version: await getGitVersion() },
   projects: { count: projectStore.projects.length },
+  testEnvironments: { count: environmentStore.environments.length },
   storage: { userData: "<redacted-userData>", settingsReadable: Boolean(settings) }
 }));
 
@@ -163,6 +172,33 @@ ipcMain.handle("hub:choose-aviutl2", async () => {
   const selected = result.filePaths[0];
   settings = saveSettings(settingsPath, { ...settings, aviutl2Path: selected });
   return { ok: true, path: selected, environment: await detectDevelopmentEnvironment(settings) };
+});
+
+ipcMain.handle("hub:list-test-environments", async () => ({
+  ok: true,
+  environments: environmentStore.environments.map(environment => ({
+    ...environment,
+    running: runtimeProcesses.has(environment.id),
+    pid: runtimeProcesses.get(environment.id)?.pid ?? null
+  }))
+}));
+
+ipcMain.handle("hub:create-test-environment", async () => {
+  const detected = await detectDevelopmentEnvironment(settings);
+  if (!detected.aviutl2.available) return { ok: false, error: "AVIUTL2_NOT_CONFIGURED" };
+
+  const root = path.join(app.getPath("userData"), "hub-data", "test-environments");
+  const result = createTestEnvironment({
+    sourceExecutable: detected.aviutl2.path,
+    environmentsRoot: root,
+    name: "AviUtl2 Test " + (environmentStore.environments.length + 1)
+  });
+  if (!result.ok) return result;
+
+  environmentStore.environments.push(result.environment);
+  environmentStore = saveEnvironments(environmentsPath, environmentStore);
+  logger.write("info", "Test environment created", { environmentId: result.environment.id });
+  return { ok: true, environment: result.environment };
 });
 
 ipcMain.handle("hub:save-window-preference", (_event, value) => {
@@ -354,6 +390,144 @@ ipcMain.handle("hub:get-build-history", async (_event, projectId) => {
   const safeId = project.id.replace(/[^a-z0-9._-]+/gi, "_");
   const historyPath = path.join(app.getPath("userData"), "hub-data", "build-history", safeId + ".json");
   return { ok: true, entries: loadBuildHistory(historyPath).slice(0, 10) };
+});
+
+ipcMain.handle("hub:get-install-state", async (_event, projectId, environmentId) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  const environment = environmentStore.environments.find(item => item.id === environmentId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  if (!environment) return { ok: false, error: "TEST_ENVIRONMENT_NOT_FOUND" };
+
+  const safeProject = project.id.replace(/[^a-z0-9._-]+/gi, "_");
+  const installManifestPath = path.join(
+    app.getPath("userData"),
+    "hub-data",
+    "install-manifests",
+    safeProject + "__" + environment.id + ".json"
+  );
+  return { ok: true, state: getInstallState({ installManifestPath }) };
+});
+
+ipcMain.handle("hub:install-latest-build", async (_event, projectId, environmentId) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  const environment = environmentStore.environments.find(item => item.id === environmentId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  if (!environment) return { ok: false, error: "TEST_ENVIRONMENT_NOT_FOUND" };
+  if (runtimeProcesses.has(environment.id)) return { ok: false, error: "TEST_ENVIRONMENT_RUNNING" };
+  if (!isRepositoryTrusted(trustStore, project.repositorySlug)) {
+    return { ok: false, error: "REPOSITORY_NOT_TRUSTED" };
+  }
+
+  const manifestResult = readPluginManifest(project.localPath);
+  if (!manifestResult.valid) return { ok: false, error: "MANIFEST_INVALID", details: manifestResult.errors };
+
+  const safeProject = project.id.replace(/[^a-z0-9._-]+/gi, "_");
+  const historyPath = path.join(app.getPath("userData"), "hub-data", "build-history", safeProject + ".json");
+  const latest = loadBuildHistory(historyPath).find(entry => entry.ok && entry.artifact?.path);
+  if (!latest?.artifact?.path || !fs.existsSync(latest.artifact.path)) {
+    return { ok: false, error: "ARTIFACT_NOT_FOUND" };
+  }
+
+  const installManifestPath = path.join(
+    app.getPath("userData"),
+    "hub-data",
+    "install-manifests",
+    safeProject + "__" + environment.id + ".json"
+  );
+  const backupRoot = path.join(
+    app.getPath("userData"),
+    "hub-data",
+    "deploy-backups",
+    safeProject,
+    environment.id
+  );
+
+  const result = installArtifact({
+    projectId: project.id,
+    environment,
+    pluginManifest: manifestResult.value,
+    artifactPath: latest.artifact.path,
+    installManifestPath,
+    backupRoot
+  });
+  logger.write(result.ok ? "info" : "warn", "Test install", {
+    repositorySlug: project.repositorySlug,
+    environmentId,
+    result: result.ok ? "success" : result.error
+  });
+  return result;
+});
+
+ipcMain.handle("hub:rollback-install", async (_event, projectId, environmentId) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  const environment = environmentStore.environments.find(item => item.id === environmentId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  if (!environment) return { ok: false, error: "TEST_ENVIRONMENT_NOT_FOUND" };
+  if (runtimeProcesses.has(environment.id)) return { ok: false, error: "TEST_ENVIRONMENT_RUNNING" };
+
+  const safeProject = project.id.replace(/[^a-z0-9._-]+/gi, "_");
+  const installManifestPath = path.join(
+    app.getPath("userData"),
+    "hub-data",
+    "install-manifests",
+    safeProject + "__" + environment.id + ".json"
+  );
+  return rollbackInstall({ environment, installManifestPath });
+});
+
+ipcMain.handle("hub:uninstall-test-build", async (_event, projectId, environmentId) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  const environment = environmentStore.environments.find(item => item.id === environmentId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  if (!environment) return { ok: false, error: "TEST_ENVIRONMENT_NOT_FOUND" };
+  if (runtimeProcesses.has(environment.id)) return { ok: false, error: "TEST_ENVIRONMENT_RUNNING" };
+
+  const safeProject = project.id.replace(/[^a-z0-9._-]+/gi, "_");
+  const installManifestPath = path.join(
+    app.getPath("userData"),
+    "hub-data",
+    "install-manifests",
+    safeProject + "__" + environment.id + ".json"
+  );
+  return uninstallManagedFiles({ environment, installManifestPath });
+});
+
+ipcMain.handle("hub:launch-test-aviutl2", async (_event, environmentId) => {
+  const environment = environmentStore.environments.find(item => item.id === environmentId);
+  if (!environment) return { ok: false, error: "TEST_ENVIRONMENT_NOT_FOUND" };
+  if (runtimeProcesses.has(environment.id)) {
+    const current = runtimeProcesses.get(environment.id);
+    return { ok: true, alreadyRunning: true, pid: current.pid, startedAt: current.startedAt };
+  }
+
+  const launched = launchAviUtl2(environment, result => {
+    const current = runtimeProcesses.get(environment.id);
+    runtimeProcesses.delete(environment.id);
+    const payload = {
+      environmentId: environment.id,
+      environmentName: environment.name,
+      pid: current?.pid ?? null,
+      startedAt: current?.startedAt ?? null,
+      endedAt: new Date().toISOString(),
+      ...result
+    };
+    logger.write(result.cleanExit ? "info" : "warn", "AviUtl2 test runtime ended", payload);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("hub:runtime-exit", payload);
+    }
+  });
+
+  if (!launched.ok) return launched;
+  runtimeProcesses.set(environment.id, {
+    child: launched.child,
+    pid: launched.pid,
+    startedAt: launched.startedAt
+  });
+  logger.write("info", "AviUtl2 test runtime started", {
+    environmentId: environment.id,
+    pid: launched.pid
+  });
+  return { ok: true, pid: launched.pid, startedAt: launched.startedAt };
 });
 
 ipcMain.handle("hub:get-plugin-manifest", async (_event, projectId) => {
