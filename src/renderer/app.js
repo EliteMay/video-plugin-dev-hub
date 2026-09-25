@@ -147,6 +147,21 @@ async function renderProjects() {
     branch.className = "project-meta";
     branch.textContent = "Branch: " + (project.gitState?.branch || project.defaultBranch || "不明");
 
+    const pluginMeta = document.createElement("span");
+    pluginMeta.className = "project-meta";
+    if (project.manifestSummary?.valid) {
+      const sdk = project.manifestSummary.sdkCommit
+        ? " / SDK " + project.manifestSummary.sdkCommit.slice(0, 8)
+        : "";
+      pluginMeta.textContent =
+        "Type: " + (project.manifestSummary.pluginType ?? "不明") +
+        " / " + (project.manifestSummary.architecture ?? "不明") + sdk;
+    } else {
+      pluginMeta.textContent = project.manifestSummary?.found
+        ? "plugin-project.json に問題があります"
+        : "plugin-project.json 未作成";
+    }
+
     const taskSelect = document.createElement("select");
     taskSelect.className = "task-select";
     const placeholder = document.createElement("option");
@@ -178,7 +193,22 @@ async function renderProjects() {
       taskSelect.disabled = true;
     }
 
-    info.append(title, repo, branch, taskSelect);
+    const compatibility = document.createElement("span");
+    const compatStatus = project.compatibility?.status ?? "unknown";
+    compatibility.className = compatStatus === "ready-for-runtime-test"
+      ? "state-ok"
+      : compatStatus === "blocked"
+        ? "state-error"
+        : "state-warn";
+    const compatText = {
+      "ready-for-runtime-test": "互換性: 実機確認へ進めます",
+      "needs-version-check": "互換性: AviUtl2 Version確認が必要",
+      "blocked": "互換性: 現在の設定では対象外",
+      "unknown": "互換性: 未確認"
+    };
+    compatibility.textContent = compatText[compatStatus] ?? "互換性: 未確認";
+
+    info.append(title, repo, branch, pluginMeta, compatibility, taskSelect);
 
     const state = document.createElement("div");
     state.className = "project-state";
