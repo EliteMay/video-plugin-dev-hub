@@ -12,6 +12,7 @@ import { previewSave, saveToGitHub } from "./core/git-save.mjs";
 import { readRoadmap } from "./core/roadmap.mjs";
 import { detectDevelopmentEnvironment } from "./core/environment.mjs";
 import { compatibilityState, readPluginManifest } from "./core/plugin-manifest.mjs";
+import { isRepositoryTrusted, loadTrust, saveTrust, setRepositoryTrust } from "./core/trust.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 nativeTheme.themeSource = "dark";
@@ -25,6 +26,8 @@ let settings;
 let settingsPath;
 let projectsPath;
 let projectStore;
+let trustPath;
+let trustStore;
 let logger;
 
 function clampWindow(win) {
@@ -101,8 +104,10 @@ app.whenReady().then(() => {
   fs.mkdirSync(dataRoot, { recursive: true });
   settingsPath = path.join(dataRoot, "settings.json");
   projectsPath = path.join(dataRoot, "projects.json");
+  trustPath = path.join(dataRoot, "trust.json");
   settings = loadSettings(settingsPath);
   projectStore = loadProjects(projectsPath);
+  trustStore = loadTrust(trustPath);
   logger = createLogger(path.join(dataRoot, "logs", "hub.log"));
   logger.write("info", "App ready", { version: app.getVersion() });
 
@@ -194,7 +199,8 @@ ipcMain.handle("hub:list-projects", async () => {
         found: manifest.found,
         errors: manifest.errors
       },
-      compatibility: compatibilityState(manifest.value, environment)
+      compatibility: compatibilityState(manifest.value, environment),
+      trusted: isRepositoryTrusted(trustStore, project.repositorySlug)
     });
   }
   return result;
@@ -266,6 +272,17 @@ ipcMain.handle("hub:sync-project", async (_event, projectId) => {
     result: result.ok ? "success" : result.error
   });
   return result;
+});
+
+ipcMain.handle("hub:set-project-trust", async (_event, projectId, trusted) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  trustStore = setRepositoryTrust(trustStore, project.repositorySlug, trusted === true);
+  trustStore = saveTrust(trustPath, trustStore);
+  logger.write("info", trusted ? "Repository trusted" : "Repository trust revoked", {
+    repositorySlug: project.repositorySlug
+  });
+  return { ok: true, trusted: isRepositoryTrusted(trustStore, project.repositorySlug) };
 });
 
 ipcMain.handle("hub:get-plugin-manifest", async (_event, projectId) => {
