@@ -124,7 +124,14 @@ async function buildProject(project, configuration) {
 
   if (!result.ok) {
     projectMessage.textContent = errorText(result.error);
-    if (result.logs) {
+    const diagnostics = result.diagnostics ?? [];
+    if (diagnostics.length) {
+      const summary = diagnostics.slice(0, 12).map(item =>
+        (item.file ?? "") + ":" + (item.line ?? "?") + "  " +
+        item.severity.toUpperCase() + " " + (item.code ?? "") + "  " + item.message
+      ).join("\n");
+      window.alert("Compiler診断\n\n" + summary);
+    } else if (result.logs) {
       window.alert("Build Log（末尾）\n\n" + String(result.logs).slice(-6000));
     }
     await renderProjects();
