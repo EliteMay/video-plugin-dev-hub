@@ -10,6 +10,13 @@ const projectMessage = document.querySelector("#projectMessage");
 const projectName = document.querySelector("#projectName");
 const repositoryUrl = document.querySelector("#repositoryUrl");
 const localPath = document.querySelector("#localPath");
+const aviutlStatus = document.querySelector("#aviutlStatus");
+const aviutlPathText = document.querySelector("#aviutlPathText");
+const cmakeEnvironment = document.querySelector("#cmakeEnvironment");
+const cppEnvironment = document.querySelector("#cppEnvironment");
+const sdkEnvironment = document.querySelector("#sdkEnvironment");
+const aviutlEnvironment = document.querySelector("#aviutlEnvironment");
+const environmentMessage = document.querySelector("#environmentMessage");
 
 function errorText(error) {
   const messages = {
@@ -196,6 +203,43 @@ async function renderProjects() {
   }
 }
 
+async function renderEnvironment() {
+  environmentMessage.textContent = "開発環境を確認しています…";
+  const environment = await window.hub.getEnvironment();
+
+  const aviutl = environment.aviutl2;
+  aviutlStatus.textContent = aviutl.available ? "● 検出済み" : "● 見つかりません";
+  aviutlStatus.className = "status " + (aviutl.available ? "ok" : "pending");
+  aviutlPathText.textContent = aviutl.available ? aviutl.path : "AviUtl2.exeを選択してください。";
+  aviutlEnvironment.textContent = aviutl.available ? "利用可能" : "未設定";
+  aviutlEnvironment.className = aviutl.available ? "env-ok" : "env-warn";
+
+  cmakeEnvironment.textContent = environment.cmake.available
+    ? "利用可能 " + (environment.cmake.version ?? "")
+    : "見つかりません";
+  cmakeEnvironment.className = environment.cmake.available ? "env-ok" : "env-warn";
+
+  cppEnvironment.textContent = environment.visualCpp.available
+    ? "利用可能 " + (environment.visualCpp.version ?? "")
+    : "見つかりません";
+  cppEnvironment.className = environment.visualCpp.available ? "env-ok" : "env-warn";
+
+  sdkEnvironment.textContent = environment.windowsSdk.available
+    ? "利用可能 " + (environment.windowsSdk.version ?? "")
+    : "見つかりません";
+  sdkEnvironment.className = environment.windowsSdk.available ? "env-ok" : "env-warn";
+
+  const missing = [];
+  if (!aviutl.available) missing.push("AviUtl2");
+  if (!environment.cmake.available) missing.push("CMake");
+  if (!environment.visualCpp.available) missing.push("Visual C++ Build Tools");
+  if (!environment.windowsSdk.available) missing.push("Windows SDK");
+
+  environmentMessage.textContent = missing.length
+    ? "不足または未設定: " + missing.join(" / ")
+    : "AviUtl2 Plugin開発に必要な基本環境を確認できました。";
+}
+
 async function init() {
   const status = await window.hub.getStatus();
   version.textContent = "v" + status.appVersion;
@@ -203,8 +247,20 @@ async function init() {
   network.classList.toggle("good", status.online);
   gitStatus.textContent = status.gitVersion ? "● " + status.gitVersion : "● Gitが見つかりません";
   gitStatus.className = "status " + (status.gitVersion ? "ok" : "pending");
-  await renderProjects();
+  await Promise.all([renderProjects(), renderEnvironment()]);
 }
+
+document.querySelector("#refreshEnvironment").addEventListener("click", async () => {
+  await renderEnvironment();
+});
+
+document.querySelector("#chooseAviUtl2").addEventListener("click", async () => {
+  const result = await window.hub.chooseAviUtl2();
+  if (result?.ok) {
+    environmentMessage.textContent = "AviUtl2.exeを保存しました。";
+    await renderEnvironment();
+  }
+});
 
 document.querySelector("#projectsButton").addEventListener("click", () => {
   document.querySelector("#projectsPanel").scrollIntoView({ behavior: "smooth", block: "start" });
