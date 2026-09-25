@@ -1,0 +1,42 @@
+{
+  "name": "video-plugin-dev-hub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Windows development hub for AviUtl2 plugins and scripts.",
+  "main": "src/main.mjs",
+  "scripts": {
+    "dev": "electron src/main.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "build:win": "electron-builder --win nsis --x64 --publish never"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "electron": "44.4.3",
+    "electron-builder": "26.15.3"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
+  },
+  "build": {
+    "appId": "com.elitemay.videoplugindevhub",
+    "productName": "Video Plugin Dev Hub",
+    "asar": true,
+    "directories": { "output": "dist" },
+    "files": ["src/**/*", "package.json", "README.md", "REQUIREMENTS.md", "PROJECT_RULES.md"],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "artifactName": "video_plugin_dev_hub_${version}_setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Video Plugin Dev Hub"
+    },
+    "publish": [{ "provider": "github", "owner": "EliteMay", "repo": "video-plugin-dev-hub" }]
+  }
+}
