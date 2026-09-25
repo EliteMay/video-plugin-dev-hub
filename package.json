@@ -1,13 +1,13 @@
 {
   "name": "video-plugin-dev-hub",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Windows development hub for AviUtl2 plugins and scripts.",
   "main": "src/main.mjs",
   "scripts": {
     "dev": "electron src/main.mjs",
-    "test": "node --test tests/settings.test.mjs tests/projects.test.mjs tests/git-status.test.mjs tests/git-sync.test.mjs tests/roadmap.test.mjs tests/environment.test.mjs tests/plugin-manifest.test.mjs tests/trust.test.mjs tests/build.test.mjs tests/build-history.test.mjs tests/test-environments.test.mjs tests/deploy.test.mjs tests/runtime.test.mjs tests/verification.test.mjs tests/handoff.test.mjs tests/handoff-pack.test.mjs",
+    "test": "node --test tests/settings.test.mjs tests/projects.test.mjs tests/git-status.test.mjs tests/git-sync.test.mjs tests/roadmap.test.mjs tests/environment.test.mjs tests/plugin-manifest.test.mjs tests/trust.test.mjs tests/build.test.mjs tests/build-history.test.mjs tests/test-environments.test.mjs tests/deploy.test.mjs tests/runtime.test.mjs tests/verification.test.mjs tests/handoff.test.mjs tests/handoff-pack.test.mjs tests/updater-import.test.mjs",
     "build:win": "electron-builder --win nsis --x64 --publish never"
   },
   "engines": {
