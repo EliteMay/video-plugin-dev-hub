@@ -9,6 +9,10 @@ contextBridge.exposeInMainWorld("hub", {
   chooseProjectFolder: () => ipcRenderer.invoke("hub:choose-project-folder"),
   addProject: (value) => ipcRenderer.invoke("hub:add-project", value),
   inspectProject: (projectId) => ipcRenderer.invoke("hub:inspect-project", projectId),
+  cloneProject: (value) => ipcRenderer.invoke("hub:clone-project", value),
+  syncProject: (projectId) => ipcRenderer.invoke("hub:sync-project", projectId),
+  previewSave: (projectId) => ipcRenderer.invoke("hub:preview-save", projectId),
+  saveProject: (projectId, message) => ipcRenderer.invoke("hub:save-project", projectId, message),
   checkForUpdates: () => ipcRenderer.invoke("hub:check-for-updates"),
   onUpdateStatus: (callback) => {
     const listener = (_event, payload) => callback(payload);
