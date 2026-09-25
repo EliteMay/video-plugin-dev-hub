@@ -7,7 +7,7 @@ import { loadSettings, saveSettings } from "./core/settings.mjs";
 import { createLogger } from "./core/logger.mjs";
 import { createProject, loadProjects, saveProjects } from "./core/projects.mjs";
 import { getGitVersion, inspectRepository } from "./core/git.mjs";
-import { cloneRepository, safeSync } from "./core/git-sync.mjs";
+import { cloneRepository, safeSync, validateRepositoryIdentity } from "./core/git-sync.mjs";
 import { previewSave, saveToGitHub } from "./core/git-save.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -172,9 +172,9 @@ ipcMain.handle("hub:add-project", async (_event, input) => {
     if (!gitState.validGitRepository) {
       return { ok: false, error: "NOT_GIT_REPOSITORY", gitState };
     }
-    const normalizedOrigin = String(gitState.origin ?? "").replace(/\.git$/i, "").toLowerCase();
-    if (normalizedOrigin && normalizedOrigin !== project.repositoryUrl.toLowerCase()) {
-      return { ok: false, error: "ORIGIN_MISMATCH", gitState };
+    const identityError = validateRepositoryIdentity(project, gitState);
+    if (identityError) {
+      return { ok: false, error: identityError, gitState };
     }
     project.defaultBranch = gitState.branch || "main";
     projectStore.projects.push(project);
