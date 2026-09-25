@@ -78,7 +78,8 @@
           </label>
         </div>
         <div class="row start">
-          <button class="primary" type="button" id="addProject">登録</button>
+          <button class="primary" type="button" id="addProject">既存Repositoryを登録</button>
+          <button class="secondary" type="button" id="cloneProject">GitHubからCloneして登録</button>
           <span class="muted" id="projectMessage"></span>
         </div>
         <div id="projectList" class="project-list"></div>
@@ -97,8 +98,9 @@
           <li>✓ Git状態確認</li>
           <li>✓ origin照合</li>
           <li>✓ atomic Project保存</li>
-          <li>○ Clone / 安全同期</li>
-          <li>○ GitHubへ保存</li>
+          <li>✓ Clone / 安全同期</li>
+          <li>✓ 変更一覧</li>
+          <li>✓ GitHubへ保存</li>
         </ul>
         <button class="primary" id="updateButton">Hubの更新を確認</button>
         <span class="muted" id="updateStatus"></span>
