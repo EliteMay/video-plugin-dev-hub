@@ -48,10 +48,10 @@
 
 ## Phase 6 — Verification / AI handoff
 
-- [ ] Step results and memo
-- [ ] Screenshot evidence
-- [ ] Version-linked verification
-- [ ] ChatGPT batch export
+- [x] Step results and memo
+- [x] Screenshot evidence
+- [x] Version-linked verification
+- [x] ChatGPT batch export
 
 ## Phase 7 — Foundation / Release
 
