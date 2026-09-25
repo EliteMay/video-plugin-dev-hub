@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, screen } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, screen, shell } from "electron";
 import { autoUpdater } from "electron-updater";
 import { loadSettings, saveSettings } from "./core/settings.mjs";
 import { createLogger } from "./core/logger.mjs";
@@ -19,6 +19,7 @@ import { createTestEnvironment, loadEnvironments, saveEnvironments } from "./cor
 import { getInstallState, installArtifact, rollbackInstall, uninstallManagedFiles } from "./core/deploy.mjs";
 import { launchAviUtl2 } from "./core/runtime.mjs";
 import { getTaskVerification, loadVerification, saveVerification, updateTaskVerification } from "./core/verification.mjs";
+import { createHandoffPack } from "./core/handoff-pack.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 nativeTheme.themeSource = "dark";
