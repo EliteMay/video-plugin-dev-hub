@@ -11,6 +11,7 @@ import { cloneRepository, safeSync, validateRepositoryIdentity } from "./core/gi
 import { previewSave, saveToGitHub } from "./core/git-save.mjs";
 import { readRoadmap } from "./core/roadmap.mjs";
 import { detectDevelopmentEnvironment } from "./core/environment.mjs";
+import { compatibilityState, readPluginManifest } from "./core/plugin-manifest.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 nativeTheme.themeSource = "dark";
@@ -164,9 +165,11 @@ ipcMain.handle("hub:save-window-preference", (_event, value) => {
 
 ipcMain.handle("hub:list-projects", async () => {
   const result = [];
+  const environment = await detectDevelopmentEnvironment(settings);
   for (const project of projectStore.projects) {
     const gitState = await inspectRepository(project.localPath);
     const roadmap = readRoadmap(project.localPath);
+    const manifest = readPluginManifest(project.localPath);
     const currentTask = roadmap.tasks?.find(task => task.key === project.currentTaskKey) ??
       roadmap.tasks?.find(task => !task.completed) ??
       null;
@@ -179,7 +182,19 @@ ipcMain.handle("hub:list-projects", async () => {
         source: roadmap.source ?? null,
         completedCount: roadmap.completedCount ?? 0,
         remainingCount: roadmap.remainingCount ?? 0
-      }
+      },
+      manifestSummary: manifest.valid ? {
+        valid: true,
+        pluginType: manifest.value.target?.pluginType ?? null,
+        architecture: manifest.value.target?.architecture ?? null,
+        sdkRepository: manifest.value.sdk?.repository ?? null,
+        sdkCommit: manifest.value.sdk?.commit ?? null
+      } : {
+        valid: false,
+        found: manifest.found,
+        errors: manifest.errors
+      },
+      compatibility: compatibilityState(manifest.value, environment)
     });
   }
   return result;
@@ -251,6 +266,12 @@ ipcMain.handle("hub:sync-project", async (_event, projectId) => {
     result: result.ok ? "success" : result.error
   });
   return result;
+});
+
+ipcMain.handle("hub:get-plugin-manifest", async (_event, projectId) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  return { ok: true, manifest: readPluginManifest(project.localPath) };
 });
 
 ipcMain.handle("hub:get-roadmap", async (_event, projectId) => {
