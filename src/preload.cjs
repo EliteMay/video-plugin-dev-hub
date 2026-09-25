@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("hub", {
   inspectProject: (projectId) => ipcRenderer.invoke("hub:inspect-project", projectId),
   cloneProject: (value) => ipcRenderer.invoke("hub:clone-project", value),
   syncProject: (projectId) => ipcRenderer.invoke("hub:sync-project", projectId),
+  setProjectTrust: (projectId, enabled) => ipcRenderer.invoke("hub:set-project-trust", projectId, enabled),
   getPluginManifest: (projectId) => ipcRenderer.invoke("hub:get-plugin-manifest", projectId),
   getRoadmap: (projectId) => ipcRenderer.invoke("hub:get-roadmap", projectId),
   setCurrentTask: (projectId, taskKey) => ipcRenderer.invoke("hub:set-current-task", projectId, taskKey),
