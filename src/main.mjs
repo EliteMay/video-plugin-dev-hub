@@ -686,6 +686,133 @@ ipcMain.handle("hub:save-project", async (_event, projectId, commitMessage) => {
   return result;
 });
 
+ipcMain.handle("hub:create-chatgpt-pack", async (_event, projectId, environmentId) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+
+  const gitState = await inspectRepository(project.localPath);
+  const roadmap = readRoadmap(project.localPath);
+  const currentTask = roadmap.tasks?.find(task => task.key === project.currentTaskKey) ??
+    roadmap.tasks?.find(task => !task.completed) ??
+    null;
+  const manifest = readPluginManifest(project.localPath);
+  const safeProject = project.id.replace(/[^a-z0-9._-]+/gi, "_");
+
+  const buildHistoryPath = path.join(app.getPath("userData"), "hub-data", "build-history", safeProject + ".json");
+  const latestBuild = loadBuildHistory(buildHistoryPath)[0] ?? null;
+  const verificationPath = path.join(app.getPath("userData"), "hub-data", "verification", safeProject + ".json");
+  const verificationStore = loadVerification(verificationPath);
+  const selectedEnvironment = environmentStore.environments.find(item => item.id === environmentId) ?? null;
+
+  let installState = null;
+  if (selectedEnvironment) {
+    const installManifestPath = path.join(
+      app.getPath("userData"), "hub-data", "install-manifests",
+      safeProject + "__" + selectedEnvironment.id + ".json"
+    );
+    installState = getInstallState({ installManifestPath });
+  }
+
+  const verificationTasks = Object.values(verificationStore.tasks ?? {}).map(item => ({
+    taskKey: item.taskKey,
+    taskText: item.taskText,
+    owner: item.owner,
+    stepResults: item.stepResults ?? {},
+    memo: item.memo ?? "",
+    screenshots: (item.screenshots ?? []).map(file => path.basename(file)),
+    context: item.context ?? null,
+    updatedAt: item.updatedAt ?? null
+  }));
+
+  const report = {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    hub: { version: app.getVersion() },
+    project: {
+      id: project.id,
+      name: project.name,
+      repositorySlug: project.repositorySlug,
+      repositoryUrl: project.repositoryUrl
+    },
+    repository: {
+      commit: gitState.head || null,
+      branch: gitState.branch || null,
+      dirty: !gitState.clean,
+      changedCount: gitState.changedCount ?? 0,
+      changes: (gitState.changes ?? []).map(item => ({ path: item.path, label: item.label }))
+    },
+    plugin: manifest.valid ? {
+      id: manifest.value.id,
+      name: manifest.value.name,
+      type: manifest.value.target?.pluginType ?? null,
+      architecture: manifest.value.target?.architecture ?? null,
+      sdkRepository: manifest.value.sdk?.repository ?? null,
+      sdkCommit: manifest.value.sdk?.commit ?? null
+    } : { manifestValid: false, errors: manifest.errors },
+    currentTask,
+    roadmap: {
+      source: roadmap.source ?? null,
+      completedCount: roadmap.completedCount ?? 0,
+      remainingCount: roadmap.remainingCount ?? 0
+    },
+    latestBuild: latestBuild ? {
+      id: latestBuild.id,
+      ok: latestBuild.ok,
+      configuration: latestBuild.configuration,
+      commit: latestBuild.commit,
+      dirty: latestBuild.dirty,
+      artifact: latestBuild.artifact ? {
+        relativePath: latestBuild.artifact.relativePath,
+        sha256: latestBuild.artifact.sha256,
+        size: latestBuild.artifact.size
+      } : null,
+      error: latestBuild.error ?? null,
+      diagnostics: latestBuild.diagnostics ?? []
+    } : null,
+    testEnvironment: selectedEnvironment ? {
+      id: selectedEnvironment.id,
+      name: selectedEnvironment.name,
+      running: runtimeProcesses.has(selectedEnvironment.id)
+    } : null,
+    installState,
+    verification: { tasks: verificationTasks },
+    roleBoundary: {
+      chatgpt: "Repositoryだけで完了できるコード・文書・Roadmap作業を実行する。",
+      user: "Windows実機操作、AviUtl2目視、Previewや操作感の確認を行う。"
+    }
+  };
+
+  const evidenceScreenshots = [];
+  for (const item of Object.values(verificationStore.tasks ?? {})) {
+    for (const screenshotPath of item.screenshots ?? []) {
+      evidenceScreenshots.push({ taskKey: item.taskKey, path: screenshotPath });
+    }
+  }
+
+  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+  const packRoot = path.join(
+    app.getPath("userData"), "hub-data", "chatgpt-packs",
+    stamp + "-" + safeProject
+  );
+  const screenshotBuffer = mainWindow && !mainWindow.isDestroyed()
+    ? (await mainWindow.capturePage()).toPNG()
+    : null;
+
+  createHandoffPack({
+    packRoot,
+    report,
+    screenshotBuffer,
+    evidenceScreenshots,
+    logPath: logger.path
+  });
+  logger.write("info", "ChatGPT handoff pack created", {
+    repositorySlug: project.repositorySlug,
+    packName: path.basename(packRoot)
+  });
+  await shell.openPath(packRoot);
+  return { ok: true, packName: path.basename(packRoot) };
+});
+
 ipcMain.handle("hub:check-for-updates", async () => {
   if (!app.isPackaged) return { ok: false, reason: "development" };
   if (!net.isOnline()) return { ok: false, reason: "offline" };
