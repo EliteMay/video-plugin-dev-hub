@@ -24,6 +24,11 @@ contextBridge.exposeInMainWorld("hub", {
   uninstallTestBuild: (projectId, environmentId) => ipcRenderer.invoke("hub:uninstall-test-build", projectId, environmentId),
   launchTestAviUtl2: (environmentId) => ipcRenderer.invoke("hub:launch-test-aviutl2", environmentId),
   getPluginManifest: (projectId) => ipcRenderer.invoke("hub:get-plugin-manifest", projectId),
+  getVerification: (projectId, taskKey) => ipcRenderer.invoke("hub:get-verification", projectId, taskKey),
+  saveVerification: (projectId, taskKey, patch, environmentId) =>
+    ipcRenderer.invoke("hub:save-verification", projectId, taskKey, patch, environmentId),
+  addVerificationScreenshot: (projectId, taskKey) =>
+    ipcRenderer.invoke("hub:add-verification-screenshot", projectId, taskKey),
   getRoadmap: (projectId) => ipcRenderer.invoke("hub:get-roadmap", projectId),
   setCurrentTask: (projectId, taskKey) => ipcRenderer.invoke("hub:set-current-task", projectId, taskKey),
   previewSave: (projectId) => ipcRenderer.invoke("hub:preview-save", projectId),
