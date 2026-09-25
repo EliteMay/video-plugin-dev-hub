@@ -30,6 +30,9 @@ const verificationMemo = document.querySelector("#verificationMemo");
 const verificationScreenshotCount = document.querySelector("#verificationScreenshotCount");
 const verificationMessage = document.querySelector("#verificationMessage");
 let activeVerification = null;
+const chatgptProjectSelect = document.querySelector("#chatgptProjectSelect");
+const createSharePackButton = document.querySelector("#createSharePack");
+const sharePackMessage = document.querySelector("#sharePackMessage");
 
 function errorText(error) {
   const messages = {
@@ -288,6 +291,21 @@ async function renderProjects() {
   const projects = await window.hub.listProjects();
   projectCount.textContent = projects.length + "件";
   projectList.replaceChildren();
+
+  const previousShareProject = chatgptProjectSelect.value;
+  chatgptProjectSelect.replaceChildren();
+  const sharePlaceholder = document.createElement("option");
+  sharePlaceholder.value = "";
+  sharePlaceholder.textContent = "Projectを選択";
+  chatgptProjectSelect.append(sharePlaceholder);
+  for (const project of projects) {
+    const option = document.createElement("option");
+    option.value = project.id;
+    option.textContent = project.name;
+    option.selected = project.id === previousShareProject;
+    chatgptProjectSelect.append(option);
+  }
+  createSharePackButton.disabled = !chatgptProjectSelect.value;
 
   if (projects.length === 0) {
     const empty = document.createElement("div");
@@ -645,6 +663,24 @@ document.querySelector("#chooseAviUtl2").addEventListener("click", async () => {
     environmentMessage.textContent = "AviUtl2.exeを保存しました。";
     await renderEnvironment();
   }
+});
+
+document.querySelector("#chatgptButton").addEventListener("click", () => {
+  document.querySelector("#chatgptPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+chatgptProjectSelect.addEventListener("change", () => {
+  createSharePackButton.disabled = !chatgptProjectSelect.value;
+});
+
+createSharePackButton.addEventListener("click", async () => {
+  const projectId = chatgptProjectSelect.value;
+  if (!projectId) return;
+  sharePackMessage.textContent = "共有パックを作成しています…";
+  const result = await window.hub.createSharePack(projectId, selectedTestEnvironmentId());
+  sharePackMessage.textContent = result.ok
+    ? "共有パックを作成しました。フォルダを開いています: " + result.packName
+    : errorText(result.error);
 });
 
 document.querySelector("#projectsButton").addEventListener("click", () => {
