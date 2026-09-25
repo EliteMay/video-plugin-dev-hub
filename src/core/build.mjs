@@ -19,6 +19,37 @@ export function resolveProjectPath(repositoryPath, relativePath) {
   return resolved;
 }
 
+export function parseCompilerDiagnostics(text) {
+  const rows = [];
+  for (const line of String(text ?? "").split(/\r?\n/)) {
+    let match = line.match(/^(.+?)\((\d+)(?:,(\d+))?\):\s*(warning|error)\s+([^:]+):\s*(.+)$/i);
+    if (match) {
+      rows.push({
+        file: match[1].trim(),
+        line: Number(match[2]),
+        column: match[3] ? Number(match[3]) : null,
+        severity: match[4].toLowerCase(),
+        code: match[5].trim(),
+        message: match[6].trim()
+      });
+      continue;
+    }
+
+    match = line.match(/^(.+?):(\d+):(\d+):\s*(warning|error):\s*(.+)$/i);
+    if (match) {
+      rows.push({
+        file: match[1].trim(),
+        line: Number(match[2]),
+        column: Number(match[3]),
+        severity: match[4].toLowerCase(),
+        code: null,
+        message: match[5].trim()
+      });
+    }
+  }
+  return rows.slice(0, 200);
+}
+
 export function selectArtifact(manifest, configuration) {
   const artifacts = Array.isArray(manifest?.build?.artifacts) ? manifest.build.artifacts : [];
   return artifacts.find(item => item.configuration === configuration) ?? null;
@@ -91,10 +122,12 @@ export async function buildCmakeProject({
     logs.push(built.stdout, built.stderr);
   } catch (error) {
     logs.push(String(error?.stdout ?? ""), String(error?.stderr ?? ""), String(error?.message ?? ""));
+    const combinedLogs = logs.filter(Boolean).join("\n").slice(-200000);
     return {
       ok: false,
       error: "BUILD_FAILED",
-      logs: logs.filter(Boolean).join("\n").slice(-200000)
+      diagnostics: parseCompilerDiagnostics(combinedLogs),
+      logs: combinedLogs
     };
   }
 
@@ -117,6 +150,7 @@ export async function buildCmakeProject({
   const endedAt = new Date();
   const stamp = startedAt.toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
   const shortCommit = String(commit ?? "unknown").slice(0, 8);
+  const combinedLogs = logs.filter(Boolean).join("\n").slice(-200000);
   return {
     ok: true,
     build: {
@@ -128,6 +162,7 @@ export async function buildCmakeProject({
       commit: commit ?? null,
       artifact
     },
-    logs: logs.filter(Boolean).join("\n").slice(-200000)
+    diagnostics: parseCompilerDiagnostics(combinedLogs),
+    logs: combinedLogs
   };
 }
