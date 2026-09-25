@@ -18,6 +18,7 @@ import { appendBuildHistory, loadBuildHistory } from "./core/build-history.mjs";
 import { createTestEnvironment, loadEnvironments, saveEnvironments } from "./core/test-environments.mjs";
 import { getInstallState, installArtifact, rollbackInstall, uninstallManagedFiles } from "./core/deploy.mjs";
 import { launchAviUtl2 } from "./core/runtime.mjs";
+import { getTaskVerification, loadVerification, saveVerification, updateTaskVerification } from "./core/verification.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 nativeTheme.themeSource = "dark";
@@ -534,6 +535,120 @@ ipcMain.handle("hub:get-plugin-manifest", async (_event, projectId) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
   return { ok: true, manifest: readPluginManifest(project.localPath) };
+});
+
+ipcMain.handle("hub:get-verification", async (_event, projectId, taskKey) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  const roadmap = readRoadmap(project.localPath);
+  const task = roadmap.tasks?.find(item => item.key === taskKey);
+  if (!task) return { ok: false, error: "TASK_NOT_AVAILABLE" };
+
+  const safeProject = project.id.replace(/[^a-z0-9._-]+/gi, "_");
+  const verificationPath = path.join(
+    app.getPath("userData"),
+    "hub-data",
+    "verification",
+    safeProject + ".json"
+  );
+  const store = loadVerification(verificationPath);
+  return { ok: true, task, verification: getTaskVerification(store, task) };
+});
+
+ipcMain.handle("hub:save-verification", async (_event, projectId, taskKey, patch, environmentId) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  const roadmap = readRoadmap(project.localPath);
+  const task = roadmap.tasks?.find(item => item.key === taskKey);
+  if (!task) return { ok: false, error: "TASK_NOT_AVAILABLE" };
+
+  const gitState = await inspectRepository(project.localPath);
+  const safeProject = project.id.replace(/[^a-z0-9._-]+/gi, "_");
+  const buildHistoryPath = path.join(
+    app.getPath("userData"),
+    "hub-data",
+    "build-history",
+    safeProject + ".json"
+  );
+  const latestBuild = loadBuildHistory(buildHistoryPath).find(entry => entry.ok) ?? null;
+  const testEnvironment = environmentStore.environments.find(item => item.id === environmentId) ?? null;
+
+  const verificationPath = path.join(
+    app.getPath("userData"),
+    "hub-data",
+    "verification",
+    safeProject + ".json"
+  );
+  let store = loadVerification(verificationPath);
+  store = updateTaskVerification(store, task, patch ?? {}, {
+    repository: {
+      commit: gitState.head || null,
+      branch: gitState.branch || null,
+      dirty: !gitState.clean
+    },
+    build: latestBuild ? {
+      id: latestBuild.id,
+      configuration: latestBuild.configuration,
+      commit: latestBuild.commit,
+      artifactSha256: latestBuild.artifact?.sha256 ?? null
+    } : null,
+    testEnvironment: testEnvironment ? {
+      id: testEnvironment.id,
+      name: testEnvironment.name
+    } : null,
+    hubVersion: app.getVersion(),
+    verifiedAt: new Date().toISOString()
+  });
+  saveVerification(verificationPath, store);
+  return { ok: true, task, verification: getTaskVerification(store, task) };
+});
+
+ipcMain.handle("hub:add-verification-screenshot", async (_event, projectId, taskKey) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  const roadmap = readRoadmap(project.localPath);
+  const task = roadmap.tasks?.find(item => item.key === taskKey);
+  if (!task) return { ok: false, error: "TASK_NOT_AVAILABLE" };
+
+  const selected = await dialog.showOpenDialog(mainWindow, {
+    title: "確認用スクリーンショットを選択",
+    properties: ["openFile"],
+    filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }]
+  });
+  if (selected.canceled || selected.filePaths.length === 0) {
+    return { ok: false, canceled: true };
+  }
+
+  const source = selected.filePaths[0];
+  const safeProject = project.id.replace(/[^a-z0-9._-]+/gi, "_");
+  const destinationDirectory = path.join(
+    app.getPath("userData"),
+    "hub-data",
+    "screenshots",
+    safeProject,
+    task.key
+  );
+  fs.mkdirSync(destinationDirectory, { recursive: true });
+  const extension = path.extname(source).toLowerCase();
+  const fileName = Date.now() + extension;
+  const destination = path.join(destinationDirectory, fileName);
+  fs.copyFileSync(source, destination);
+
+  const verificationPath = path.join(
+    app.getPath("userData"),
+    "hub-data",
+    "verification",
+    safeProject + ".json"
+  );
+  let store = loadVerification(verificationPath);
+  store = updateTaskVerification(store, task, { screenshots: [destination] }, null);
+  saveVerification(verificationPath, store);
+
+  return {
+    ok: true,
+    screenshot: { path: destination, name: fileName },
+    verification: getTaskVerification(store, task)
+  };
 });
 
 ipcMain.handle("hub:get-roadmap", async (_event, projectId) => {
