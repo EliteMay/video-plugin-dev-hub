@@ -13,6 +13,8 @@ import { readRoadmap } from "./core/roadmap.mjs";
 import { detectDevelopmentEnvironment } from "./core/environment.mjs";
 import { compatibilityState, readPluginManifest } from "./core/plugin-manifest.mjs";
 import { isRepositoryTrusted, loadTrust, saveTrust, setRepositoryTrust } from "./core/trust.mjs";
+import { buildCmakeProject } from "./core/build.mjs";
+import { appendBuildHistory, loadBuildHistory } from "./core/build-history.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 nativeTheme.themeSource = "dark";
@@ -283,6 +285,73 @@ ipcMain.handle("hub:set-project-trust", async (_event, projectId, trusted) => {
     repositorySlug: project.repositorySlug
   });
   return { ok: true, trusted: isRepositoryTrusted(trustStore, project.repositorySlug) };
+});
+
+ipcMain.handle("hub:build-project", async (_event, projectId, configuration) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+
+  const trusted = isRepositoryTrusted(trustStore, project.repositorySlug);
+  if (!trusted) return { ok: false, error: "REPOSITORY_NOT_TRUSTED" };
+
+  const manifestResult = readPluginManifest(project.localPath);
+  if (!manifestResult.valid) {
+    return { ok: false, error: "MANIFEST_INVALID", details: manifestResult.errors };
+  }
+
+  const environment = await detectDevelopmentEnvironment(settings);
+  const gitState = await inspectRepository(project.localPath);
+  const result = await buildCmakeProject({
+    project,
+    manifest: manifestResult.value,
+    configuration,
+    trusted,
+    environment,
+    commit: gitState.head || null
+  });
+
+  const safeId = project.id.replace(/[^a-z0-9._-]+/gi, "_");
+  const historyPath = path.join(app.getPath("userData"), "hub-data", "build-history", safeId + ".json");
+  const entry = result.ok
+    ? {
+        id: result.build.id,
+        ok: true,
+        configuration: result.build.configuration,
+        startedAt: result.build.startedAt,
+        endedAt: result.build.endedAt,
+        durationMs: result.build.durationMs,
+        commit: result.build.commit,
+        dirty: !gitState.clean,
+        artifact: result.build.artifact,
+        logs: result.logs
+      }
+    : {
+        id: new Date().toISOString(),
+        ok: false,
+        configuration,
+        at: new Date().toISOString(),
+        commit: gitState.head || null,
+        dirty: !gitState.clean,
+        error: result.error,
+        logs: result.logs ?? result.message ?? ""
+      };
+
+  appendBuildHistory(historyPath, entry);
+  logger.write(result.ok ? "info" : "warn", "Project build", {
+    repositorySlug: project.repositorySlug,
+    configuration,
+    result: result.ok ? "success" : result.error
+  });
+
+  return result;
+});
+
+ipcMain.handle("hub:get-build-history", async (_event, projectId) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  const safeId = project.id.replace(/[^a-z0-9._-]+/gi, "_");
+  const historyPath = path.join(app.getPath("userData"), "hub-data", "build-history", safeId + ".json");
+  return { ok: true, entries: loadBuildHistory(historyPath).slice(0, 10) };
 });
 
 ipcMain.handle("hub:get-plugin-manifest", async (_event, projectId) => {
