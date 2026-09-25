@@ -291,3 +291,16 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+.share-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: 10px;
+  margin-top: 14px;
+  align-items: center;
+}
+@media (max-width: 760px) {
+  .share-row {
+    grid-template-columns: 1fr;
+  }
+}
