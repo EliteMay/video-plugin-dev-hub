@@ -198,3 +198,8 @@ input:focus { border-color: #59677c; }
 }
 
 .state-error { color: #e6a3a3; }
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
