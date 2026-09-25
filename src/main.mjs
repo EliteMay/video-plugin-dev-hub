@@ -323,6 +323,7 @@ ipcMain.handle("hub:build-project", async (_event, projectId, configuration) => 
         commit: result.build.commit,
         dirty: !gitState.clean,
         artifact: result.build.artifact,
+        diagnostics: result.diagnostics ?? [],
         logs: result.logs
       }
     : {
@@ -333,6 +334,7 @@ ipcMain.handle("hub:build-project", async (_event, projectId, configuration) => 
         commit: gitState.head || null,
         dirty: !gitState.clean,
         error: result.error,
+        diagnostics: result.diagnostics ?? [],
         logs: result.logs ?? result.message ?? ""
       };
 
