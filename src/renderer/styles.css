@@ -115,3 +115,40 @@ input:focus { border-color: #59677c; }
 }
 .state-ok { color: #9fdfb4; }
 .state-warn { color: #e0c487; }
+
+.project-info, .project-state {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.project-meta {
+  color: #6f7a8a;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.project-actions button {
+  white-space: nowrap;
+}
+.empty-state {
+  border: 1px dashed #303744;
+  border-radius: 10px;
+  padding: 18px;
+  color: #7f8998;
+  text-align: center;
+}
+@media (max-width: 1120px) {
+  .project-item {
+    grid-template-columns: 1fr;
+  }
+  .project-actions {
+    justify-content: flex-start;
+  }
+}
