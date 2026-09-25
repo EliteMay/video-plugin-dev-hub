@@ -23,3 +23,18 @@ test("plain bullet roadmaps remain supported as fallback", () => {
   assert.equal(result.tasks.length, 2);
   assert.equal(result.remainingCount, 2);
 });
+
+test("nested verification metadata is captured without becoming tasks", () => {
+  const result = parseRoadmapText(`
+- [ ] AviUtl2で確認
+  - 担当: あなた
+  - Plugin一覧に表示される
+  - Effectを追加できる
+  - 完了条件: 2項目とも確認
+`);
+  assert.equal(result.tasks.length, 1);
+  assert.equal(result.tasks[0].owner, "あなた");
+  assert.deepEqual(result.tasks[0].steps, ["Plugin一覧に表示される", "Effectを追加できる"]);
+  assert.equal(result.tasks[0].completion, "2項目とも確認");
+  assert.equal(typeof result.tasks[0].signature, "string");
+});
