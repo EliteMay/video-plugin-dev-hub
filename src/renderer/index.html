@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video Plugin Dev Hub</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">Video Plugin<br><strong>Dev Hub</strong></div>
+      <nav>
+        <button class="nav active">ホーム</button>
+        <button class="nav" disabled>プロジェクト</button>
+        <button class="nav" disabled>新規作成</button>
+        <div class="sep"></div>
+        <button class="nav" disabled>開発</button>
+        <button class="nav" disabled>ChatGPT連携</button>
+        <button class="nav" id="diagnosticsButton">診断</button>
+        <button class="nav" disabled>設定</button>
+      </nav>
+      <div class="version" id="version">...</div>
+    </aside>
+
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">PHASE 1</p>
+          <h1>開発環境</h1>
+          <p class="muted">まずHub本体の状態を安全に確認します。</p>
+        </div>
+        <span class="pill" id="network">確認中</span>
+      </header>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Hub</h2>
+          <div class="status ok">● 起動済み</div>
+          <p>Electron共通基盤を構築中です。</p>
+        </article>
+        <article class="card">
+          <h2>GitHub</h2>
+          <div class="status pending">● Phase 2で接続</div>
+          <p>Repository管理と安全な同期を次に追加します。</p>
+        </article>
+        <article class="card">
+          <h2>AviUtl2</h2>
+          <div class="status pending">● Phase 3で検出</div>
+          <p>普段の環境とは分離したテスト環境を標準にします。</p>
+        </article>
+      </section>
+
+      <section class="card large">
+        <div class="row">
+          <div>
+            <p class="eyebrow">CURRENT TASK</p>
+            <h2>Electron Desktop Foundation</h2>
+          </div>
+          <span class="pill good">実装中</span>
+        </div>
+        <ul class="checks">
+          <li>✓ ナイトモード</li>
+          <li>✓ Single Instance</li>
+          <li>✓ Window状態保存</li>
+          <li>✓ 設定Backup</li>
+          <li>✓ 診断情報</li>
+          <li>✓ Renderer復旧</li>
+          <li>✓ 自動更新の基盤</li>
+        </ul>
+        <button class="primary" id="updateButton">更新を確認</button>
+        <span class="muted" id="updateStatus"></span>
+      </section>
+
+      <section class="card large hidden" id="diagnostics">
+        <div class="row">
+          <h2>診断</h2>
+          <button class="secondary" id="closeDiagnostics">閉じる</button>
+        </div>
+        <pre id="diagnosticsText"></pre>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
