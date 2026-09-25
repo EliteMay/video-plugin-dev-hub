@@ -11,10 +11,105 @@ const projectName = document.querySelector("#projectName");
 const repositoryUrl = document.querySelector("#repositoryUrl");
 const localPath = document.querySelector("#localPath");
 
+function errorText(error) {
+  const messages = {
+    INVALID_GITHUB_REPOSITORY_URL: "GitHub Repository URLを確認してください。",
+    INVALID_LOCAL_PATH: "PCのRepositoryフォルダを選んでください。",
+    INVALID_DESTINATION: "Clone先フォルダを確認してください。",
+    DESTINATION_NOT_EMPTY: "Clone先は空のフォルダを選んでください。",
+    ALREADY_REGISTERED: "このRepositoryはすでに登録されています。",
+    NOT_GIT_REPOSITORY: "選んだフォルダはGit Repositoryとして確認できません。",
+    ORIGIN_MISMATCH: "PC側Repositoryと登録したGitHub URLが一致していません。",
+    BRANCH_MISMATCH: "現在のBranchが登録時のBranchと違います。",
+    WORKTREE_DIRTY: "PC側に未保存の変更があるため、安全同期を停止しました。",
+    SYNC_FAILED: "GitHubとの安全同期に失敗しました。",
+    CLONE_FAILED: "GitHubからCloneできませんでした。",
+    NOTHING_TO_SAVE: "GitHubへ保存する変更はありません。",
+    SENSITIVE_FILES: "秘密情報の可能性があるファイルを検出したため保存を停止しました。",
+    GIT_IDENTITY_MISSING: "Gitの名前またはメール設定が見つからないためCommitできません。",
+    COMMIT_MESSAGE_REQUIRED: "保存内容の説明を入力してください。",
+    COMMIT_FAILED: "PC側へ変更履歴を保存できませんでした。",
+    MERGE_CONFLICT: "GitHub側の変更と競合しました。PC側のCommitは保持しています。",
+    PUSH_FAILED: "PC側へCommitしましたが、GitHubへの送信に失敗しました。",
+    PROJECT_NOT_FOUND: "Projectが見つかりません。"
+  };
+  return messages[error] ?? "操作を完了できませんでした。";
+}
+
 function projectStateText(state) {
   if (!state?.validGitRepository) return "Git Repositoryとして確認できません";
   if (!state.clean) return "PC側に未保存の変更があります（" + state.changedCount + "件）";
   return "Git Repositoryは正常です";
+}
+
+function clearProjectForm() {
+  projectName.value = "";
+  repositoryUrl.value = "";
+  localPath.value = "";
+}
+
+function actionButton(label, handler, kind = "secondary") {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = kind;
+  button.textContent = label;
+  button.addEventListener("click", handler);
+  return button;
+}
+
+async function showChanges(project) {
+  const result = await window.hub.previewSave(project.id);
+  if (!result.ok && result.error !== "SENSITIVE_FILES") {
+    projectMessage.textContent = errorText(result.error);
+    return null;
+  }
+
+  const lines = (result.changes ?? []).map(item => item.label + "  " + item.path);
+  const sensitive = (result.sensitive ?? []).map(item => item.path);
+  let message = lines.length ? lines.join("\n") : "変更はありません。";
+  if (sensitive.length) {
+    message += "\n\n保存停止対象:\n" + sensitive.join("\n");
+  }
+  window.alert(message);
+  return result;
+}
+
+async function saveProject(project) {
+  const preview = await window.hub.previewSave(project.id);
+  if (!preview.ok) {
+    projectMessage.textContent = errorText(preview.error);
+    if (preview.error === "SENSITIVE_FILES") {
+      const files = (preview.sensitive ?? []).map(item => item.path).join("\n");
+      window.alert("GitHubへ保存しません。\n\n秘密情報の可能性があるファイル:\n" + files);
+    }
+    return;
+  }
+
+  const summary = preview.changes.map(item => item.label + "  " + item.path).join("\n");
+  const confirmed = window.confirm("次の変更をGitHubへ保存します。\n\n" + summary + "\n\n続けますか？");
+  if (!confirmed) return;
+
+  const message = window.prompt("保存内容の説明を入力してください。", "Update plugin development files");
+  if (!message?.trim()) {
+    projectMessage.textContent = "GitHubへの保存をキャンセルしました。";
+    return;
+  }
+
+  projectMessage.textContent = project.name + " をGitHubへ保存しています…";
+  const result = await window.hub.saveProject(project.id, message.trim());
+  projectMessage.textContent = result.ok
+    ? project.name + " をGitHubへ保存しました。"
+    : errorText(result.error);
+  await renderProjects();
+}
+
+async function syncProject(project) {
+  projectMessage.textContent = project.name + " を安全に同期しています…";
+  const result = await window.hub.syncProject(project.id);
+  projectMessage.textContent = result.ok
+    ? project.name + " を最新状態にしました。"
+    : errorText(result.error);
+  await renderProjects();
 }
 
 async function renderProjects() {
@@ -22,18 +117,49 @@ async function renderProjects() {
   projectCount.textContent = projects.length + "件";
   projectList.replaceChildren();
 
+  if (projects.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "まだPlugin Repositoryは登録されていません。";
+    projectList.append(empty);
+    return;
+  }
+
   for (const project of projects) {
     const item = document.createElement("article");
     item.className = "project-item";
+
+    const info = document.createElement("div");
+    info.className = "project-info";
     const title = document.createElement("strong");
     title.textContent = project.name;
     const repo = document.createElement("span");
     repo.className = "muted";
     repo.textContent = project.repositorySlug;
-    const state = document.createElement("span");
-    state.className = project.gitState?.clean ? "state-ok" : "state-warn";
-    state.textContent = projectStateText(project.gitState);
-    item.append(title, repo, state);
+    const branch = document.createElement("span");
+    branch.className = "project-meta";
+    branch.textContent = "Branch: " + (project.gitState?.branch || project.defaultBranch || "不明");
+    info.append(title, repo, branch);
+
+    const state = document.createElement("div");
+    state.className = "project-state";
+    const stateText = document.createElement("span");
+    stateText.className = project.gitState?.clean ? "state-ok" : "state-warn";
+    stateText.textContent = projectStateText(project.gitState);
+    const pathText = document.createElement("span");
+    pathText.className = "project-meta";
+    pathText.textContent = project.localPath;
+    state.append(stateText, pathText);
+
+    const actions = document.createElement("div");
+    actions.className = "project-actions";
+    actions.append(
+      actionButton("安全に同期", () => syncProject(project)),
+      actionButton("変更を見る", () => showChanges(project)),
+      actionButton("GitHubに保存", () => saveProject(project), "primary")
+    );
+
+    item.append(info, state, actions);
     projectList.append(item);
   }
 }
@@ -58,7 +184,7 @@ document.querySelector("#chooseFolder").addEventListener("click", async () => {
 });
 
 document.querySelector("#addProject").addEventListener("click", async () => {
-  projectMessage.textContent = "確認しています…";
+  projectMessage.textContent = "Repositoryを確認しています…";
   const result = await window.hub.addProject({
     name: projectName.value,
     repositoryUrl: repositoryUrl.value,
@@ -66,21 +192,30 @@ document.querySelector("#addProject").addEventListener("click", async () => {
   });
 
   if (!result.ok) {
-    const messages = {
-      INVALID_GITHUB_REPOSITORY_URL: "GitHub Repository URLを確認してください。",
-      INVALID_LOCAL_PATH: "PCのRepositoryフォルダを選んでください。",
-      ALREADY_REGISTERED: "このRepositoryはすでに登録されています。",
-      NOT_GIT_REPOSITORY: "選んだフォルダはGit Repositoryとして確認できません。",
-      ORIGIN_MISMATCH: "PC側RepositoryとGitHub URLが一致していません。"
-    };
-    projectMessage.textContent = messages[result.error] ?? "登録できませんでした。";
+    projectMessage.textContent = errorText(result.error);
     return;
   }
 
-  projectMessage.textContent = "登録しました。";
-  projectName.value = "";
-  repositoryUrl.value = "";
-  localPath.value = "";
+  projectMessage.textContent = "既存Repositoryを登録しました。";
+  clearProjectForm();
+  await renderProjects();
+});
+
+document.querySelector("#cloneProject").addEventListener("click", async () => {
+  projectMessage.textContent = "GitHubからCloneしています…";
+  const result = await window.hub.cloneProject({
+    name: projectName.value,
+    repositoryUrl: repositoryUrl.value,
+    localPath: localPath.value
+  });
+
+  if (!result.ok) {
+    projectMessage.textContent = errorText(result.error);
+    return;
+  }
+
+  projectMessage.textContent = "Cloneして登録しました。";
+  clearProjectForm();
   await renderProjects();
 });
 
