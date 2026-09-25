@@ -46,8 +46,9 @@
         </article>
         <article class="card">
           <h2>AviUtl2</h2>
-          <div class="status pending">● Phase 3で検出</div>
-          <p>普段の環境とは分離したテスト環境を標準にします。</p>
+          <div class="status pending" id="aviutlStatus">● 確認中</div>
+          <p id="aviutlPathText">AviUtl2.exeを探しています。</p>
+          <button class="secondary" type="button" id="chooseAviUtl2">AviUtl2.exeを選択</button>
         </article>
       </section>
 
@@ -83,6 +84,35 @@
           <span class="muted" id="projectMessage"></span>
         </div>
         <div id="projectList" class="project-list"></div>
+      </section>
+
+      <section class="card large" id="environmentPanel">
+        <div class="row">
+          <div>
+            <p class="eyebrow">DEVELOPMENT ENVIRONMENT</p>
+            <h2>AviUtl2開発環境</h2>
+          </div>
+          <button class="secondary" type="button" id="refreshEnvironment">再確認</button>
+        </div>
+        <div class="environment-grid">
+          <div class="environment-item">
+            <span>CMake</span>
+            <strong id="cmakeEnvironment">確認中</strong>
+          </div>
+          <div class="environment-item">
+            <span>Visual C++</span>
+            <strong id="cppEnvironment">確認中</strong>
+          </div>
+          <div class="environment-item">
+            <span>Windows SDK</span>
+            <strong id="sdkEnvironment">確認中</strong>
+          </div>
+          <div class="environment-item">
+            <span>AviUtl2</span>
+            <strong id="aviutlEnvironment">確認中</strong>
+          </div>
+        </div>
+        <p class="muted" id="environmentMessage"></p>
       </section>
 
       <section class="card large">
