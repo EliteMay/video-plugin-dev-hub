@@ -41,10 +41,10 @@
 
 ## Phase 5 — Test Deploy
 
-- [ ] Test environment registry
-- [ ] Managed install/update/uninstall
-- [ ] Rollback
-- [ ] AviUtl2 launch observation
+- [x] Test environment registry
+- [x] Managed install/update/uninstall
+- [x] Rollback
+- [x] AviUtl2 launch observation
 
 ## Phase 6 — Verification / AI handoff
 
