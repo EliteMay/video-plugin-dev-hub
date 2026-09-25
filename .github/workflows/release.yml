@@ -32,6 +32,8 @@ jobs:
             "exists=false" >> $env:GITHUB_OUTPUT
             Write-Host "$tag will be built and published."
           }
+
+          exit 0
         env:
           GH_TOKEN: ${{ github.token }}
 
