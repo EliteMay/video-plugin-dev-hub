@@ -10,6 +10,7 @@ import { getGitVersion, inspectRepository } from "./core/git.mjs";
 import { cloneRepository, safeSync, validateRepositoryIdentity } from "./core/git-sync.mjs";
 import { previewSave, saveToGitHub } from "./core/git-save.mjs";
 import { readRoadmap } from "./core/roadmap.mjs";
+import { detectDevelopmentEnvironment } from "./core/environment.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 nativeTheme.themeSource = "dark";
@@ -139,6 +140,22 @@ ipcMain.handle("hub:get-diagnostics", async () => ({
 }));
 
 ipcMain.handle("hub:get-settings", () => settings);
+
+ipcMain.handle("hub:get-environment", async () => {
+  return detectDevelopmentEnvironment(settings);
+});
+
+ipcMain.handle("hub:choose-aviutl2", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "AviUtl2.exeを選択",
+    properties: ["openFile"],
+    filters: [{ name: "AviUtl2", extensions: ["exe"] }]
+  });
+  if (result.canceled || result.filePaths.length === 0) return { ok: false, canceled: true };
+  const selected = result.filePaths[0];
+  settings = saveSettings(settingsPath, { ...settings, aviutl2Path: selected });
+  return { ok: true, path: selected, environment: await detectDevelopmentEnvironment(settings) };
+});
 
 ipcMain.handle("hub:save-window-preference", (_event, value) => {
   settings = saveSettings(settingsPath, { ...settings, ...value });
