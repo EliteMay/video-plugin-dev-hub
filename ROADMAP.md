@@ -19,15 +19,15 @@
 
 - [x] Project registry
 - [x] Repository validation
-- [ ] Clone and safe sync
-- [x] Local change explanation (basic status; detailed file explanations remain)
-- [ ] GitHub save flow
-- [ ] Roadmap parser and current task
+- [x] Clone and safe sync
+- [x] Local change explanation and changed-file preview
+- [x] GitHub save flow
+- [x] Roadmap parser and current task
 
 ## Phase 3 — AviUtl2 Environment
 
-- [ ] AviUtl2 detection
-- [ ] MSVC / Windows SDK / CMake detection
+- [x] AviUtl2 detection + manual selection
+- [x] MSVC / Windows SDK / CMake detection
 - [ ] Plugin SDK metadata
 - [ ] Compatibility state
 
