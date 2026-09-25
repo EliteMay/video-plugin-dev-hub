@@ -9,6 +9,7 @@ import { createProject, loadProjects, saveProjects } from "./core/projects.mjs";
 import { getGitVersion, inspectRepository } from "./core/git.mjs";
 import { cloneRepository, safeSync, validateRepositoryIdentity } from "./core/git-sync.mjs";
 import { previewSave, saveToGitHub } from "./core/git-save.mjs";
+import { readRoadmap } from "./core/roadmap.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 nativeTheme.themeSource = "dark";
@@ -148,7 +149,21 @@ ipcMain.handle("hub:list-projects", async () => {
   const result = [];
   for (const project of projectStore.projects) {
     const gitState = await inspectRepository(project.localPath);
-    result.push({ ...project, gitState });
+    const roadmap = readRoadmap(project.localPath);
+    const currentTask = roadmap.tasks?.find(task => task.key === project.currentTaskKey) ??
+      roadmap.tasks?.find(task => !task.completed) ??
+      null;
+    result.push({
+      ...project,
+      gitState,
+      currentTask,
+      roadmapSummary: {
+        found: roadmap.found,
+        source: roadmap.source ?? null,
+        completedCount: roadmap.completedCount ?? 0,
+        remainingCount: roadmap.remainingCount ?? 0
+      }
+    });
   }
   return result;
 });
@@ -219,6 +234,23 @@ ipcMain.handle("hub:sync-project", async (_event, projectId) => {
     result: result.ok ? "success" : result.error
   });
   return result;
+});
+
+ipcMain.handle("hub:get-roadmap", async (_event, projectId) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  return { ok: true, roadmap: readRoadmap(project.localPath), currentTaskKey: project.currentTaskKey ?? null };
+});
+
+ipcMain.handle("hub:set-current-task", async (_event, projectId, taskKey) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  const roadmap = readRoadmap(project.localPath);
+  const task = roadmap.tasks?.find(item => item.key === taskKey);
+  if (!task || task.completed) return { ok: false, error: "TASK_NOT_AVAILABLE" };
+  project.currentTaskKey = task.key;
+  projectStore = saveProjects(projectsPath, projectStore);
+  return { ok: true, task };
 });
 
 ipcMain.handle("hub:preview-save", async (_event, projectId) => {
