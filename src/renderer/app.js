@@ -17,6 +17,10 @@ const cppEnvironment = document.querySelector("#cppEnvironment");
 const sdkEnvironment = document.querySelector("#sdkEnvironment");
 const aviutlEnvironment = document.querySelector("#aviutlEnvironment");
 const environmentMessage = document.querySelector("#environmentMessage");
+const testEnvironmentSelect = document.querySelector("#testEnvironmentSelect");
+const createTestEnvironmentButton = document.querySelector("#createTestEnvironment");
+const launchTestEnvironmentButton = document.querySelector("#launchTestEnvironment");
+const runtimeStatus = document.querySelector("#runtimeStatus");
 
 function errorText(error) {
   const messages = {
@@ -147,6 +151,46 @@ async function buildProject(project, configuration) {
   await renderProjects();
 }
 
+function selectedTestEnvironmentId() {
+  return testEnvironmentSelect?.value || "";
+}
+
+async function installProject(project) {
+  const environmentId = selectedTestEnvironmentId();
+  if (!environmentId) {
+    projectMessage.textContent = "先にTest Environmentを作成・選択してください。";
+    return;
+  }
+  projectMessage.textContent = project.name + " をTest Environmentへ導入しています…";
+  const result = await window.hub.installLatestBuild(project.id, environmentId);
+  projectMessage.textContent = result.ok
+    ? project.name + " をTest Environmentへ導入しました。"
+    : errorText(result.error);
+  await renderProjects();
+}
+
+async function rollbackProject(project) {
+  const environmentId = selectedTestEnvironmentId();
+  if (!environmentId) return;
+  const result = await window.hub.rollbackInstall(project.id, environmentId);
+  projectMessage.textContent = result.ok
+    ? project.name + " を前の導入Versionへ戻しました。"
+    : errorText(result.error);
+  await renderProjects();
+}
+
+async function uninstallProject(project) {
+  const environmentId = selectedTestEnvironmentId();
+  if (!environmentId) return;
+  const confirmed = window.confirm(project.name + " をTest Environmentから削除します。\nHubが管理しているファイルだけ削除します。");
+  if (!confirmed) return;
+  const result = await window.hub.uninstallTestBuild(project.id, environmentId);
+  projectMessage.textContent = result.ok
+    ? project.name + " をTest Environmentから削除しました。"
+    : errorText(result.error);
+  await renderProjects();
+}
+
 async function syncProject(project) {
   projectMessage.textContent = project.name + " を安全に同期しています…";
   const result = await window.hub.syncProject(project.id);
@@ -168,6 +212,8 @@ async function renderProjects() {
     projectList.append(empty);
     return;
   }
+
+  const environmentId = selectedTestEnvironmentId();
 
   for (const project of projects) {
     const item = document.createElement("article");
@@ -255,6 +301,10 @@ async function renderProjects() {
 
     const historyResult = await window.hub.getBuildHistory(project.id);
     const latestBuild = historyResult.ok ? historyResult.entries?.[0] : null;
+    const installResult = environmentId
+      ? await window.hub.getInstallState(project.id, environmentId)
+      : { ok: false };
+    const installState = installResult.ok ? installResult.state : null;
 
     const state = document.createElement("div");
     state.className = "project-state";
@@ -274,7 +324,12 @@ async function renderProjects() {
     } else {
       buildText.textContent = "Build: 未実行";
     }
-    state.append(stateText, pathText, buildText);
+    const installText = document.createElement("span");
+    installText.className = installState?.installed ? "state-ok" : "project-meta";
+    installText.textContent = installState?.installed
+      ? "Test導入: 済み" + (installState.rollbackAvailable ? " / Rollback可" : "")
+      : "Test導入: 未導入";
+    state.append(stateText, pathText, buildText, installText);
 
     const actions = document.createElement("div");
     actions.className = "project-actions";
@@ -309,18 +364,62 @@ async function renderProjects() {
       releaseButton.title = debugButton.title;
     }
 
+    const installButton = actionButton("Testへ導入", () => installProject(project), "primary");
+    installButton.disabled = !canBuild || !latestBuild?.ok || !latestBuild?.artifact || !environmentId;
+
+    const rollbackButton = actionButton("前のVersionへ戻す", () => rollbackProject(project));
+    rollbackButton.disabled = !installState?.rollbackAvailable;
+
+    const uninstallButton = actionButton("Testから削除", () => uninstallProject(project));
+    uninstallButton.disabled = !installState?.installed;
+
     actions.append(
       actionButton("安全に同期", () => syncProject(project)),
       actionButton("変更を見る", () => showChanges(project)),
       trustButton,
       debugButton,
       releaseButton,
+      installButton,
+      rollbackButton,
+      uninstallButton,
       actionButton("GitHubに保存", () => saveProject(project), "primary")
     );
 
     item.append(info, state, actions);
     projectList.append(item);
   }
+}
+
+async function renderTestEnvironments() {
+  const result = await window.hub.listTestEnvironments();
+  const previous = testEnvironmentSelect.value;
+  testEnvironmentSelect.replaceChildren();
+
+  const environments = result.ok ? result.environments : [];
+  if (!environments.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "Test Environment未作成";
+    testEnvironmentSelect.append(option);
+    launchTestEnvironmentButton.disabled = true;
+    runtimeStatus.textContent = "AviUtl2.exeを設定後、Test Environmentを作成してください。";
+    return;
+  }
+
+  for (const environment of environments) {
+    const option = document.createElement("option");
+    option.value = environment.id;
+    option.textContent = environment.name + (environment.running ? "（実行中）" : "");
+    option.selected = environment.id === previous;
+    testEnvironmentSelect.append(option);
+  }
+
+  if (!testEnvironmentSelect.value) testEnvironmentSelect.value = environments[0].id;
+  const selected = environments.find(item => item.id === testEnvironmentSelect.value) ?? environments[0];
+  launchTestEnvironmentButton.disabled = false;
+  runtimeStatus.textContent = selected.running
+    ? "AviUtl2実行中 / PID " + selected.pid
+    : "分離data: " + selected.dataPath;
 }
 
 async function renderEnvironment() {
@@ -367,8 +466,36 @@ async function init() {
   network.classList.toggle("good", status.online);
   gitStatus.textContent = status.gitVersion ? "● " + status.gitVersion : "● Gitが見つかりません";
   gitStatus.className = "status " + (status.gitVersion ? "ok" : "pending");
-  await Promise.all([renderProjects(), renderEnvironment()]);
+  await renderEnvironment();
+  await renderTestEnvironments();
+  await renderProjects();
 }
+
+createTestEnvironmentButton.addEventListener("click", async () => {
+  runtimeStatus.textContent = "Test Environmentを作成しています…";
+  const result = await window.hub.createTestEnvironment();
+  runtimeStatus.textContent = result.ok
+    ? "Test Environmentを作成しました。"
+    : errorText(result.error);
+  await renderTestEnvironments();
+  await renderProjects();
+});
+
+launchTestEnvironmentButton.addEventListener("click", async () => {
+  const environmentId = selectedTestEnvironmentId();
+  if (!environmentId) return;
+  runtimeStatus.textContent = "AviUtl2を起動しています…";
+  const result = await window.hub.launchTestAviUtl2(environmentId);
+  runtimeStatus.textContent = result.ok
+    ? "AviUtl2実行中 / PID " + result.pid
+    : errorText(result.error);
+  await renderTestEnvironments();
+});
+
+testEnvironmentSelect.addEventListener("change", async () => {
+  await renderTestEnvironments();
+  await renderProjects();
+});
 
 document.querySelector("#refreshEnvironment").addEventListener("click", async () => {
   await renderEnvironment();
@@ -447,6 +574,15 @@ document.querySelector("#updateButton").addEventListener("click", async () => {
       result.reason === "offline" ? "オフラインのため確認できません。" :
       "更新確認を開始できませんでした。";
   }
+});
+
+window.hub.onRuntimeExit(async (state) => {
+  const exit = state.cleanExit ? "正常終了" : "終了コード " + (state.exitCode ?? "不明");
+  const short = state.shortRun ? " / 短時間終了" : "";
+  runtimeStatus.textContent =
+    state.environmentName + ": " + exit + " / " + Math.round(state.durationMs / 1000) + "秒" + short;
+  await renderTestEnvironments();
+  await renderProjects();
 });
 
 window.hub.onUpdateStatus((state) => {
