@@ -1,10 +1,12 @@
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { app, BrowserWindow, ipcMain, nativeTheme, net, screen } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, screen } from "electron";
 import { autoUpdater } from "electron-updater";
 import { loadSettings, saveSettings } from "./core/settings.mjs";
 import { createLogger } from "./core/logger.mjs";
+import { createProject, loadProjects, saveProjects } from "./core/projects.mjs";
+import { getGitVersion, inspectRepository } from "./core/git.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 nativeTheme.themeSource = "dark";
@@ -16,6 +18,8 @@ if (!gotLock) app.quit();
 let mainWindow;
 let settings;
 let settingsPath;
+let projectsPath;
+let projectStore;
 let logger;
 
 function clampWindow(win) {
@@ -57,9 +61,7 @@ function createWindow() {
 
   clampWindow(mainWindow);
   if (w.maximized) mainWindow.maximize();
-
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
-
   mainWindow.once("ready-to-show", () => mainWindow.show());
 
   mainWindow.on("close", () => {
@@ -93,7 +95,9 @@ app.whenReady().then(() => {
   const dataRoot = path.join(app.getPath("userData"), "hub-data");
   fs.mkdirSync(dataRoot, { recursive: true });
   settingsPath = path.join(dataRoot, "settings.json");
+  projectsPath = path.join(dataRoot, "projects.json");
   settings = loadSettings(settingsPath);
+  projectStore = loadProjects(projectsPath);
   logger = createLogger(path.join(dataRoot, "logs", "hub.log"));
   logger.write("info", "App ready", { version: app.getVersion() });
 
@@ -114,17 +118,20 @@ app.whenReady().then(() => {
   }
 });
 
-ipcMain.handle("hub:get-status", () => ({
+ipcMain.handle("hub:get-status", async () => ({
   appVersion: app.getVersion(),
   online: net.isOnline(),
-  theme: nativeTheme.shouldUseDarkColors ? "dark" : "light"
+  theme: nativeTheme.shouldUseDarkColors ? "dark" : "light",
+  gitVersion: await getGitVersion()
 }));
 
-ipcMain.handle("hub:get-diagnostics", () => ({
+ipcMain.handle("hub:get-diagnostics", async () => ({
   app: { name: app.getName(), version: app.getVersion(), packaged: app.isPackaged },
   runtime: { electron: process.versions.electron, node: process.versions.node, chrome: process.versions.chrome },
   os: { platform: process.platform, arch: process.arch, release: process.getSystemVersion() },
   network: { online: net.isOnline() },
+  git: { version: await getGitVersion() },
+  projects: { count: projectStore.projects.length },
   storage: { userData: "<redacted-userData>", settingsReadable: Boolean(settings) }
 }));
 
@@ -133,6 +140,53 @@ ipcMain.handle("hub:get-settings", () => settings);
 ipcMain.handle("hub:save-window-preference", (_event, value) => {
   settings = saveSettings(settingsPath, { ...settings, ...value });
   return settings;
+});
+
+ipcMain.handle("hub:list-projects", async () => {
+  const result = [];
+  for (const project of projectStore.projects) {
+    const gitState = await inspectRepository(project.localPath);
+    result.push({ ...project, gitState });
+  }
+  return result;
+});
+
+ipcMain.handle("hub:choose-project-folder", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Plugin Repositoryフォルダを選択",
+    properties: ["openDirectory"]
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+
+ipcMain.handle("hub:add-project", async (_event, input) => {
+  try {
+    const project = createProject(input ?? {});
+    if (projectStore.projects.some(item => item.id === project.id)) {
+      return { ok: false, error: "ALREADY_REGISTERED" };
+    }
+    const gitState = await inspectRepository(project.localPath);
+    if (!gitState.validGitRepository) {
+      return { ok: false, error: "NOT_GIT_REPOSITORY", gitState };
+    }
+    const normalizedOrigin = String(gitState.origin ?? "").replace(/\.git$/i, "").toLowerCase();
+    if (normalizedOrigin && normalizedOrigin !== project.repositoryUrl.toLowerCase()) {
+      return { ok: false, error: "ORIGIN_MISMATCH", gitState };
+    }
+    projectStore.projects.push(project);
+    projectStore = saveProjects(projectsPath, projectStore);
+    logger.write("info", "Project registered", { repositorySlug: project.repositorySlug });
+    return { ok: true, project: { ...project, gitState } };
+  } catch (error) {
+    return { ok: false, error: error?.message ?? "PROJECT_ADD_FAILED" };
+  }
+});
+
+ipcMain.handle("hub:inspect-project", async (_event, projectId) => {
+  const project = projectStore.projects.find(item => item.id === projectId);
+  if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
+  return { ok: true, project, gitState: await inspectRepository(project.localPath) };
 });
 
 ipcMain.handle("hub:check-for-updates", async () => {
