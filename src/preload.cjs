@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld("hub", {
   setCurrentTask: (projectId, taskKey) => ipcRenderer.invoke("hub:set-current-task", projectId, taskKey),
   previewSave: (projectId) => ipcRenderer.invoke("hub:preview-save", projectId),
   saveProject: (projectId, message) => ipcRenderer.invoke("hub:save-project", projectId, message),
+  createSharePack: (projectId, environmentId) =>
+    ipcRenderer.invoke("hub:create-chatgpt-pack", projectId, environmentId),
   checkForUpdates: () => ipcRenderer.invoke("hub:check-for-updates"),
   onRuntimeExit: (callback) => {
     const listener = (_event, payload) => callback(payload);
