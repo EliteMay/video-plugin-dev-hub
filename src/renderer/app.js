@@ -21,6 +21,15 @@ const testEnvironmentSelect = document.querySelector("#testEnvironmentSelect");
 const createTestEnvironmentButton = document.querySelector("#createTestEnvironment");
 const launchTestEnvironmentButton = document.querySelector("#launchTestEnvironment");
 const runtimeStatus = document.querySelector("#runtimeStatus");
+const verificationPanel = document.querySelector("#verificationPanel");
+const verificationTitle = document.querySelector("#verificationTitle");
+const verificationContext = document.querySelector("#verificationContext");
+const verificationWarning = document.querySelector("#verificationWarning");
+const verificationSteps = document.querySelector("#verificationSteps");
+const verificationMemo = document.querySelector("#verificationMemo");
+const verificationScreenshotCount = document.querySelector("#verificationScreenshotCount");
+const verificationMessage = document.querySelector("#verificationMessage");
+let activeVerification = null;
 
 function errorText(error) {
   const messages = {
@@ -53,6 +62,81 @@ function errorText(error) {
     BUILD_FAILED: "Buildに失敗しました。"
   };
   return messages[error] ?? "操作を完了できませんでした。";
+}
+
+function verificationResultLabel(value) {
+  return {
+    unverified: "未確認",
+    passed: "できた",
+    failed: "できなかった",
+    blocked: "今は確認できない",
+    partial: "確認途中"
+  }[value] ?? "未確認";
+}
+
+async function openVerification(project) {
+  const task = project.currentTask;
+  if (!task) {
+    projectMessage.textContent = "先に今やるタスクを選択してください。";
+    return;
+  }
+
+  const result = await window.hub.getVerification(project.id, task.key);
+  if (!result.ok) {
+    projectMessage.textContent = errorText(result.error);
+    return;
+  }
+
+  activeVerification = {
+    projectId: project.id,
+    projectName: project.name,
+    task: result.task,
+    verification: result.verification
+  };
+
+  verificationTitle.textContent = project.name + " — " + result.task.text;
+  const contextParts = [];
+  if (result.task.owner) contextParts.push("担当: " + result.task.owner);
+  if (result.task.completion) contextParts.push("完了条件: " + result.task.completion);
+  verificationContext.textContent = contextParts.join(" / ") || "AviUtl2で実際に操作して確認します。";
+
+  verificationWarning.classList.add("hidden");
+  if (result.verification.stale) {
+    verificationWarning.textContent = "確認手順が変更されています。以前の結果をそのまま有効扱いせず、再確認してください。";
+    verificationWarning.classList.remove("hidden");
+  } else if (result.verification.completedByRoadmap) {
+    verificationWarning.textContent = "Roadmapでは完了済みです。説明追記だけを理由に再確認は要求しません。";
+    verificationWarning.classList.remove("hidden");
+  }
+
+  const steps = result.task.steps?.length ? result.task.steps : [result.task.text];
+  verificationSteps.replaceChildren();
+  steps.forEach((step, index) => {
+    const row = document.createElement("div");
+    row.className = "verification-step";
+
+    const text = document.createElement("span");
+    text.textContent = step;
+
+    const select = document.createElement("select");
+    select.dataset.stepIndex = String(index);
+    for (const value of ["unverified", "passed", "failed", "blocked", "partial"]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = verificationResultLabel(value);
+      option.selected = (result.verification.stepResults?.[String(index)] ?? "unverified") === value;
+      select.append(option);
+    }
+
+    row.append(text, select);
+    verificationSteps.append(row);
+  });
+
+  verificationMemo.value = result.verification.memo ?? "";
+  verificationScreenshotCount.textContent = (result.verification.screenshots?.length ?? 0) + "枚";
+  verificationMessage.textContent = "";
+  verificationPanel.classList.remove("hidden");
+  verificationPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function projectStateText(state) {
@@ -373,6 +457,9 @@ async function renderProjects() {
     const uninstallButton = actionButton("Testから削除", () => uninstallProject(project));
     uninstallButton.disabled = !installState?.installed;
 
+    const verificationButton = actionButton("実機確認", () => openVerification(project));
+    verificationButton.disabled = !project.currentTask;
+
     actions.append(
       actionButton("安全に同期", () => syncProject(project)),
       actionButton("変更を見る", () => showChanges(project)),
@@ -382,6 +469,7 @@ async function renderProjects() {
       installButton,
       rollbackButton,
       uninstallButton,
+      verificationButton,
       actionButton("GitHubに保存", () => saveProject(project), "primary")
     );
 
@@ -470,6 +558,56 @@ async function init() {
   await renderTestEnvironments();
   await renderProjects();
 }
+
+document.querySelector("#closeVerification").addEventListener("click", () => {
+  verificationPanel.classList.add("hidden");
+  activeVerification = null;
+});
+
+document.querySelector("#addVerificationScreenshot").addEventListener("click", async () => {
+  if (!activeVerification) return;
+  const result = await window.hub.addVerificationScreenshot(
+    activeVerification.projectId,
+    activeVerification.task.key
+  );
+  if (result?.canceled) return;
+  if (!result?.ok) {
+    verificationMessage.textContent = errorText(result?.error);
+    return;
+  }
+  activeVerification.verification = result.verification;
+  verificationScreenshotCount.textContent =
+    (result.verification.screenshots?.length ?? 0) + "枚";
+  verificationMessage.textContent = "スクリーンショットを追加しました。";
+});
+
+document.querySelector("#saveVerification").addEventListener("click", async () => {
+  if (!activeVerification) return;
+
+  const stepResults = {};
+  verificationSteps.querySelectorAll("select[data-step-index]").forEach(select => {
+    stepResults[select.dataset.stepIndex] = select.value;
+  });
+
+  verificationMessage.textContent = "確認結果を保存しています…";
+  const result = await window.hub.saveVerification(
+    activeVerification.projectId,
+    activeVerification.task.key,
+    {
+      stepResults,
+      memo: verificationMemo.value
+    },
+    selectedTestEnvironmentId()
+  );
+
+  if (!result.ok) {
+    verificationMessage.textContent = errorText(result.error);
+    return;
+  }
+
+  activeVerification.verification = result.verification;
+  verificationMessage.textContent = "確認結果を保存しました。Commit / Build / Test環境も記録しました。";
+});
 
 createTestEnvironmentButton.addEventListener("click", async () => {
   runtimeStatus.textContent = "Test Environmentを作成しています…";
