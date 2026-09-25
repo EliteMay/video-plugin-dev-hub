@@ -28,8 +28,8 @@
 
 - [x] AviUtl2 detection + manual selection
 - [x] MSVC / Windows SDK / CMake detection
-- [ ] Plugin SDK metadata
-- [ ] Compatibility state
+- [x] Plugin SDK metadata from plugin-project.json
+- [x] Compatibility state (AviUtl2 executable version reading remains future refinement)
 
 ## Phase 4 — Build
 
