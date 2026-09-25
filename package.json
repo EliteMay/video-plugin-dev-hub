@@ -7,7 +7,7 @@
   "main": "src/main.mjs",
   "scripts": {
     "dev": "electron src/main.mjs",
-    "test": "node --test tests/settings.test.mjs tests/projects.test.mjs tests/git-status.test.mjs tests/git-sync.test.mjs",
+    "test": "node --test tests/settings.test.mjs tests/projects.test.mjs tests/git-status.test.mjs tests/git-sync.test.mjs tests/roadmap.test.mjs",
     "build:win": "electron-builder --win nsis --x64 --publish never"
   },
   "engines": {
