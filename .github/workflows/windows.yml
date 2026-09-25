@@ -1,0 +1,33 @@
+name: Windows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: Unit tests
+        run: npm test
+      - name: Build Windows installer
+        run: npm run build:win
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-plugin-dev-hub-windows
+          path: dist/**
+          if-no-files-found: error
