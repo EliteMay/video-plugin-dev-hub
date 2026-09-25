@@ -33,11 +33,11 @@
 
 ## Phase 4 — Build
 
-- [ ] CMake configure
-- [ ] Debug / Release build
-- [ ] Artifact discovery and SHA-256
-- [ ] Compiler diagnostics
-- [ ] Build history
+- [x] CMake configure
+- [x] Debug / Release build
+- [x] Artifact discovery and SHA-256
+- [x] Compiler diagnostics
+- [x] Build history
 
 ## Phase 5 — Test Deploy
 
