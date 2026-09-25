@@ -7,7 +7,7 @@
   "main": "src/main.mjs",
   "scripts": {
     "dev": "electron src/main.mjs",
-    "test": "node --test tests/settings.test.mjs tests/projects.test.mjs tests/git-status.test.mjs tests/git-sync.test.mjs tests/roadmap.test.mjs tests/environment.test.mjs tests/plugin-manifest.test.mjs tests/trust.test.mjs tests/build.test.mjs tests/build-history.test.mjs",
+    "test": "node --test tests/settings.test.mjs tests/projects.test.mjs tests/git-status.test.mjs tests/git-sync.test.mjs tests/roadmap.test.mjs tests/environment.test.mjs tests/plugin-manifest.test.mjs tests/trust.test.mjs tests/build.test.mjs tests/build-history.test.mjs tests/test-environments.test.mjs tests/deploy.test.mjs tests/runtime.test.mjs",
     "build:win": "electron-builder --win nsis --x64 --publish never"
   },
   "engines": {
