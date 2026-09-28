@@ -60,7 +60,12 @@
 
 ## Phase 7 — Foundation / Release
 
-- [ ] New plugin wizard
+- [x] New plugin wizard
+  - [x] GitHub CLI readiness / login guidance
+  - [x] Foundation-based project scaffold
+  - [x] GitHub Repository create + initial push
+  - [x] Automatic Hub registration
+  - [x] Empty-state CTA from ChatGPT handoff
 - [ ] Foundation update flow
 - [ ] .au2pkg.zip packaging
 - [ ] CI artifacts
