@@ -29,4 +29,9 @@ A green CI run never means an AviUtl2 runtime test has happened.
 - unrelated installed files are never deleted
 - malformed settings recover from backup
 - offline state does not block local-only capabilities
-- renderer failure does not delete user state
+- renderer failure does not delete user state and recovery reload remains available
+- unexpected renderer IPC sender and oversized IPC payloads are rejected
+- renderer pages keep restrictive CSP and deny unexpected navigation / permissions
+- updater keeps explicit check → download → restart/install states and manual Release fallback
+- settings schema migration keeps previous user settings and last-known-good backup
+- diagnostic export remains sanitized and diagnostic logs remain bounded / clearable
