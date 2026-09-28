@@ -29,7 +29,7 @@ jobs:
       - name: Build Windows installer
         run: npm run build:win
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: video-plugin-dev-hub-windows
           path: dist/**
