@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
   <link rel="stylesheet" href="./styles.css">
   <title>Video Plugin Dev Hub - Recovery</title>
 </head>
@@ -10,7 +11,12 @@
   <div class="card recovery-card">
     <p class="eyebrow">RECOVERY</p>
     <h1>画面の処理が停止しました</h1>
-    <p class="muted">保存済みの設定やProject Dataは削除していません。アプリを再起動してください。</p>
+    <p class="muted">保存済みの設定やProject Dataは削除していません。まず画面だけ再読み込みできます。</p>
+    <div class="inline-actions">
+      <button class="primary" type="button" id="reloadRenderer">画面を再読み込み</button>
+      <span class="muted" id="recoveryMessage"></span>
+    </div>
   </div>
+  <script src="./recovery.js"></script>
 </body>
 </html>
