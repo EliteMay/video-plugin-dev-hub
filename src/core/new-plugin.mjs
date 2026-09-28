@@ -230,6 +230,10 @@ export async function createPluginProject(input, commandRunner = run) {
   if (!github.available) return { ok: false, error: "GITHUB_CLI_NOT_FOUND", github };
   if (!github.authenticated || !github.login) return { ok: false, error: "GITHUB_NOT_AUTHENTICATED", github };
 
+  if (!(await hasGitIdentity(commandRunner, parentDirectory))) {
+    return { ok: false, error: "GIT_IDENTITY_MISSING" };
+  }
+
   const targetPath = path.join(parentDirectory, repositoryName);
   if (fs.existsSync(targetPath)) return { ok: false, error: "DESTINATION_ALREADY_EXISTS", targetPath };
 
