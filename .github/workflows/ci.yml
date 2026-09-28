@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  electron:
+    uses: EliteMay/.github/.github/workflows/reusable-electron-ci.yml@3d0968f3c9fb9b16a4fd1e12cd8f53f72c4c82e2
+    with:
+      node-version: "22.12.0"
+      artifact-name: video-plugin-dev-hub-windows
+      artifact-path: "dist/*"
