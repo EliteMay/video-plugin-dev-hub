@@ -35,3 +35,8 @@ A green CI run never means an AviUtl2 runtime test has happened.
 - updater keeps explicit check → download → restart/install states and manual Release fallback
 - settings schema migration keeps previous user settings and last-known-good backup
 - diagnostic export remains sanitized and diagnostic logs remain bounded / clearable
+- new plugin wizard rejects invalid Repository names and occupied destinations
+- new plugin wizard distinguishes GitHub CLI missing / unauthenticated states
+- generated plugin metadata uses the selected AviUtl2 plugin type
+- generated plugin repositories record Foundation version / commit and preserve plugin-owned README / Roadmap
+- new plugin creation never marks the generated Repository trusted automatically

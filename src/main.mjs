@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, screen, shell } from "electron";
 import electronUpdater from "electron-updater";
@@ -22,6 +23,7 @@ import { launchAviUtl2 } from "./core/runtime.mjs";
 import { getTaskVerification, loadVerification, saveVerification, updateTaskVerification } from "./core/verification.mjs";
 import { createHandoffPack } from "./core/handoff-pack.mjs";
 import { sanitizeValue } from "./core/handoff.mjs";
+import { createPluginProject, getGitHubCliState } from "./core/new-plugin.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 nativeTheme.themeSource = "dark";
@@ -329,6 +331,104 @@ handleIpc("hub:create-test-environment", async () => {
 handleIpc("hub:save-window-preference", (_event, value) => {
   settings = saveSettings(settingsPath, { ...settings, ...value });
   return settings;
+});
+
+handleIpc("hub:get-github-cli-state", async () => {
+  return { ok: true, state: await getGitHubCliState() };
+});
+
+handleIpc("hub:choose-plugin-parent-folder", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "新しいPlugin Projectの保存先を選択",
+    defaultPath: settings.projectsRoot || app.getPath("documents"),
+    properties: ["openDirectory", "createDirectory"]
+  });
+  if (result.canceled || result.filePaths.length === 0) return { ok: false, canceled: true };
+  settings = saveSettings(settingsPath, { ...settings, projectsRoot: result.filePaths[0] });
+  return { ok: true, path: result.filePaths[0] };
+});
+
+handleIpc("hub:open-github-cli-page", async () => {
+  await shell.openExternal("https://cli.github.com/");
+  return { ok: true };
+});
+
+handleIpc("hub:start-github-login", async () => {
+  const github = await getGitHubCliState();
+  if (!github.available) return { ok: false, error: "GITHUB_CLI_NOT_FOUND" };
+  if (github.authenticated) return { ok: true, alreadyAuthenticated: true, login: github.login };
+
+  try {
+    if (process.platform === "win32") {
+      const child = spawn(
+        "cmd.exe",
+        ["/c", "start", "", "cmd.exe", "/k", "gh auth login --hostname github.com --web --git-protocol https"],
+        { detached: true, windowsHide: false, stdio: "ignore" }
+      );
+      child.unref();
+      return { ok: true, started: true };
+    }
+    await shell.openExternal("https://cli.github.com/manual/gh_auth_login");
+    return { ok: true, openedInstructions: true };
+  } catch (error) {
+    logger.write("warn", "Could not start GitHub login", { message: error?.message ?? String(error) });
+    return { ok: false, error: "GITHUB_LOGIN_START_FAILED" };
+  }
+});
+
+handleIpc("hub:create-plugin-project", async (_event, input) => {
+  const result = await createPluginProject(input ?? {});
+  if (!result.ok) {
+    logger.write("warn", "New plugin creation failed", {
+      error: result.error,
+      repositoryName: String(input?.repositoryName ?? "").slice(0, 100)
+    });
+    return result;
+  }
+
+  try {
+    const project = createProject({
+      name: result.name,
+      repositoryUrl: result.repositoryUrl,
+      localPath: result.localPath
+    });
+    if (projectStore.projects.some(item => item.id === project.id)) {
+      return { ok: false, error: "ALREADY_REGISTERED", project };
+    }
+
+    const gitState = await inspectRepository(project.localPath);
+    if (!gitState.validGitRepository) {
+      return { ok: false, error: "NOT_GIT_REPOSITORY", gitState, localPath: result.localPath };
+    }
+    const identityError = validateRepositoryIdentity(project, gitState);
+    if (identityError) {
+      return { ok: false, error: identityError, gitState, localPath: result.localPath };
+    }
+
+    project.defaultBranch = gitState.branch || "main";
+    project.currentTaskKey = null;
+    projectStore.projects.push(project);
+    projectStore = saveProjects(projectsPath, projectStore);
+    logger.write("info", "New plugin created and registered", {
+      repositorySlug: project.repositorySlug,
+      presetKey: result.presetKey,
+      foundationVersion: result.foundationVersion
+    });
+
+    return {
+      ok: true,
+      project: { ...project, gitState },
+      foundationVersion: result.foundationVersion,
+      foundationCommit: result.foundationCommit
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message ?? "PROJECT_REGISTER_FAILED",
+      localPath: result.localPath,
+      repositoryUrl: result.repositoryUrl
+    };
+  }
 });
 
 handleIpc("hub:list-projects", async () => {

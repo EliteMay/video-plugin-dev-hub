@@ -14,7 +14,7 @@
       <nav>
         <button class="nav active">ホーム</button>
         <button class="nav" id="projectsButton">プロジェクト</button>
-        <button class="nav" disabled>新規作成</button>
+        <button class="nav" id="newProjectButton">新規作成</button>
         <div class="sep"></div>
         <button class="nav" disabled>開発</button>
         <button class="nav" id="chatgptButton">ChatGPT連携</button>
@@ -51,6 +51,76 @@
           <p id="aviutlPathText">AviUtl2.exeを探しています。</p>
           <button class="secondary" type="button" id="chooseAviUtl2">AviUtl2.exeを選択</button>
         </article>
+      </section>
+
+      <section class="card large hidden" id="newProjectPanel">
+        <div class="row">
+          <div>
+            <p class="eyebrow">NEW PLUGIN</p>
+            <h2>新しいPluginを作成</h2>
+          </div>
+          <button class="secondary" type="button" id="closeNewProject">閉じる</button>
+        </div>
+        <p class="muted">Foundationを元にPCへProjectを作り、GitHub Repository作成・初回Push・Hub登録までまとめて行います。</p>
+
+        <div class="github-readiness" id="githubReadiness">
+          <div>
+            <strong>GitHub接続</strong>
+            <span class="muted" id="githubCliStatus">確認中…</span>
+          </div>
+          <div class="inline-actions compact">
+            <button class="secondary hidden" type="button" id="installGitHubCli">GitHub CLIを入れる</button>
+            <button class="secondary hidden" type="button" id="loginGitHub">GitHubへログイン</button>
+            <button class="secondary" type="button" id="refreshGitHubCli">再確認</button>
+          </div>
+        </div>
+
+        <div class="form-grid new-project-grid">
+          <label>
+            Plugin名
+            <input id="newPluginName" placeholder="例: VALO Kill Impact">
+          </label>
+          <label>
+            Repository名
+            <input id="newRepositoryName" placeholder="例: valo-kill-impact">
+          </label>
+          <label>
+            種類
+            <select id="newPluginPreset">
+              <option value="native-filter">映像フィルタ (.auf2)</option>
+              <option value="native-general">一般Plugin (.aux2)</option>
+              <option value="native-input">入力Plugin (.aui2)</option>
+              <option value="native-output">出力Plugin (.auo2)</option>
+              <option value="native-module">Script Module (.mod2)</option>
+              <option value="script-animation">アニメーションScript (.anm2)</option>
+              <option value="script-object">オブジェクトScript (.obj2)</option>
+            </select>
+          </label>
+          <label>
+            GitHub公開設定
+            <select id="newProjectVisibility">
+              <option value="private">非公開</option>
+              <option value="public">公開</option>
+            </select>
+          </label>
+          <label class="wide">
+            PCの保存先
+            <div class="path-row">
+              <input id="newProjectParent" readonly placeholder="保存先フォルダを選択してください">
+              <button class="secondary" type="button" id="chooseNewProjectParent">選択</button>
+            </div>
+          </label>
+        </div>
+
+        <div class="wizard-note">
+          <strong>作成後に自動で行うこと</strong>
+          <span>Foundation取得 → plugin-project.json / Roadmap生成 → Git初期化 → GitHub Repository作成 → 初回Push → Hub登録</span>
+        </div>
+
+        <div class="inline-actions">
+          <button class="primary" type="button" id="createNewPlugin">Plugin Projectを作成</button>
+          <span class="muted" id="newProjectMessage"></span>
+        </div>
       </section>
 
       <section class="card large" id="projectsPanel">
@@ -166,6 +236,7 @@
             <option value="">Projectを選択</option>
           </select>
           <button class="primary" type="button" id="createSharePack" disabled>ChatGPT共有パックを作る</button>
+          <button class="secondary hidden" type="button" id="chatgptCreateProjectButton">新規Pluginを作る</button>
         </div>
         <p class="muted" id="sharePackMessage"></p>
       </section>

@@ -39,6 +39,19 @@ const settingsMessage = document.querySelector("#settingsMessage");
 const diagnosticsMessage = document.querySelector("#diagnosticsMessage");
 const downloadUpdateButton = document.querySelector("#downloadUpdateButton");
 const installUpdateButton = document.querySelector("#installUpdateButton");
+const newProjectPanel = document.querySelector("#newProjectPanel");
+const newPluginName = document.querySelector("#newPluginName");
+const newRepositoryName = document.querySelector("#newRepositoryName");
+const newPluginPreset = document.querySelector("#newPluginPreset");
+const newProjectVisibility = document.querySelector("#newProjectVisibility");
+const newProjectParent = document.querySelector("#newProjectParent");
+const newProjectMessage = document.querySelector("#newProjectMessage");
+const createNewPluginButton = document.querySelector("#createNewPlugin");
+const githubCliStatus = document.querySelector("#githubCliStatus");
+const installGitHubCliButton = document.querySelector("#installGitHubCli");
+const loginGitHubButton = document.querySelector("#loginGitHub");
+const chatgptCreateProjectButton = document.querySelector("#chatgptCreateProjectButton");
+let repositoryNameTouched = false;
 
 function errorText(error) {
   const messages = {
@@ -68,7 +81,22 @@ function errorText(error) {
     INVALID_CONFIGURATION: "Build構成が正しくありません。",
     INVALID_RELATIVE_PATH: "Build Pathが安全な範囲外です。",
     PATH_OUTSIDE_REPOSITORY: "Repository外のPathはBuildに使えません。",
-    BUILD_FAILED: "Buildに失敗しました。"
+    BUILD_FAILED: "Buildに失敗しました。",
+    PLUGIN_NAME_REQUIRED: "Plugin名を入力してください。",
+    INVALID_REPOSITORY_NAME: "Repository名は半角英数字・ハイフン・アンダースコア・ドットで入力してください。",
+    INVALID_PLUGIN_PRESET: "Pluginの種類を選び直してください。",
+    INVALID_PARENT_DIRECTORY: "PCの保存先フォルダを選んでください。",
+    GITHUB_CLI_NOT_FOUND: "GitHub CLIが見つかりません。最初の1回だけインストールしてください。",
+    GITHUB_NOT_AUTHENTICATED: "GitHubへログインしてください。",
+    GITHUB_LOGIN_START_FAILED: "GitHubログイン画面を開けませんでした。",
+    DESTINATION_ALREADY_EXISTS: "同じ名前のPCフォルダがすでにあります。Repository名を変えてください。",
+    GITHUB_REPOSITORY_EXISTS: "同じ名前のGitHub Repositoryがすでにあります。Repository名を変えてください。",
+    FOUNDATION_CLONE_FAILED: "Plugin Foundationを取得できませんでした。ネット接続とGitを確認してください。",
+    GIT_INIT_FAILED: "新しいRepositoryをGitで初期化できませんでした。",
+    GIT_ADD_FAILED: "初期ファイルをGitへ追加できませんでした。",
+    INITIAL_COMMIT_FAILED: "初回Commitを作成できませんでした。",
+    GITHUB_CREATE_FAILED: "GitHub Repositoryの作成または初回Pushに失敗しました。",
+    PLUGIN_CREATE_FAILED: "Plugin Projectの作成中にエラーが発生しました."
   };
   return messages[error] ?? "操作を完了できませんでした。";
 }
@@ -312,6 +340,12 @@ async function renderProjects() {
     chatgptProjectSelect.append(option);
   }
   createSharePackButton.disabled = !chatgptProjectSelect.value;
+  chatgptCreateProjectButton.classList.toggle("hidden", projects.length !== 0);
+  if (projects.length === 0) {
+    sharePackMessage.textContent = "まだProjectがありません。先に新規Pluginを作成してください。";
+  } else if (sharePackMessage.textContent.startsWith("まだProjectがありません")) {
+    sharePackMessage.textContent = "";
+  }
 
   if (projects.length === 0) {
     const empty = document.createElement("div");
@@ -574,7 +608,52 @@ async function renderEnvironment() {
 async function renderSettings() {
   const current = await window.hub.getSettings();
   startupUpdateCheck.checked = current?.update?.checkOnStartup !== false;
+  if (!newProjectParent.value && current?.projectsRoot) {
+    newProjectParent.value = current.projectsRoot;
+  }
   settingsMessage.textContent = "";
+}
+
+function suggestRepositoryName(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9._-]+/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+async function renderGitHubCliState() {
+  githubCliStatus.textContent = "確認中…";
+  installGitHubCliButton.classList.add("hidden");
+  loginGitHubButton.classList.add("hidden");
+
+  const result = await window.hub.getGitHubCliState();
+  const state = result?.state;
+  if (!result?.ok || !state?.available) {
+    githubCliStatus.textContent = "GitHub CLIが未導入です";
+    installGitHubCliButton.classList.remove("hidden");
+    return state;
+  }
+
+  if (!state.authenticated) {
+    githubCliStatus.textContent = "GitHub CLIは利用可能 / GitHubログインが必要です";
+    loginGitHubButton.classList.remove("hidden");
+    return state;
+  }
+
+  githubCliStatus.textContent =
+    "接続済み: " + state.login + (state.version ? " / " + state.version : "");
+  return state;
+}
+
+async function openNewProjectPanel() {
+  newProjectPanel.classList.remove("hidden");
+  await renderSettings();
+  await renderGitHubCliState();
+  newProjectPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function renderDiagnostics() {
@@ -618,6 +697,7 @@ async function init() {
   await renderTestEnvironments();
   await renderProjects();
   await renderSettings();
+  await renderGitHubCliState();
   const updater = await window.hub.getUpdateState();
   if (updater?.ok) applyUpdateState(updater.state);
 }
@@ -771,6 +851,86 @@ document.querySelector("#cloneProject").addEventListener("click", async () => {
   projectMessage.textContent = "Cloneして登録しました。";
   clearProjectForm();
   await renderProjects();
+});
+
+document.querySelector("#newProjectButton").addEventListener("click", async () => {
+  await openNewProjectPanel();
+});
+
+chatgptCreateProjectButton.addEventListener("click", async () => {
+  await openNewProjectPanel();
+});
+
+document.querySelector("#closeNewProject").addEventListener("click", () => {
+  newProjectPanel.classList.add("hidden");
+});
+
+newPluginName.addEventListener("input", () => {
+  if (repositoryNameTouched && newRepositoryName.value) return;
+  const suggestion = suggestRepositoryName(newPluginName.value);
+  if (suggestion) newRepositoryName.value = suggestion;
+});
+
+newRepositoryName.addEventListener("input", () => {
+  repositoryNameTouched = newRepositoryName.value.trim().length > 0;
+});
+
+document.querySelector("#chooseNewProjectParent").addEventListener("click", async () => {
+  const result = await window.hub.choosePluginParentFolder();
+  if (result?.ok) newProjectParent.value = result.path;
+});
+
+document.querySelector("#refreshGitHubCli").addEventListener("click", async () => {
+  await renderGitHubCliState();
+});
+
+installGitHubCliButton.addEventListener("click", async () => {
+  await window.hub.openGitHubCliPage();
+  newProjectMessage.textContent = "GitHub CLIをインストールしたら「再確認」を押してください。";
+});
+
+loginGitHubButton.addEventListener("click", async () => {
+  const result = await window.hub.startGitHubLogin();
+  if (!result?.ok) {
+    newProjectMessage.textContent = errorText(result?.error);
+    return;
+  }
+  newProjectMessage.textContent = result?.alreadyAuthenticated
+    ? "GitHubへログイン済みです。"
+    : "GitHubログイン用の画面を開きました。ログイン後に「再確認」を押してください。";
+});
+
+createNewPluginButton.addEventListener("click", async () => {
+  createNewPluginButton.disabled = true;
+  newProjectMessage.textContent = "Projectを作成しています… Foundation取得 → 初期化 → GitHub作成 → 初回Push";
+
+  const result = await window.hub.createPluginProject({
+    name: newPluginName.value,
+    repositoryName: newRepositoryName.value,
+    presetKey: newPluginPreset.value,
+    visibility: newProjectVisibility.value,
+    parentDirectory: newProjectParent.value
+  });
+
+  if (!result?.ok) {
+    createNewPluginButton.disabled = false;
+    newProjectMessage.textContent = errorText(result?.error) +
+      (result?.localPath ? " 作成途中のフォルダ: " + result.localPath : "");
+    if (result?.error === "GITHUB_CLI_NOT_FOUND" || result?.error === "GITHUB_NOT_AUTHENTICATED") {
+      await renderGitHubCliState();
+    }
+    return;
+  }
+
+  newProjectMessage.textContent =
+    "作成完了: " + result.project.name + " / GitHubへ初回Pushし、Hubへ登録しました。";
+  newPluginName.value = "";
+  newRepositoryName.value = "";
+  repositoryNameTouched = false;
+  await renderProjects();
+  chatgptProjectSelect.value = result.project.id;
+  createSharePackButton.disabled = false;
+  createNewPluginButton.disabled = false;
 });
 
 document.querySelector("#diagnosticsButton").addEventListener("click", async () => {

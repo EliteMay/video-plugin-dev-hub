@@ -10,3 +10,5 @@
 - Privileged IPC accepts requests only from the current application renderer and rejects oversized payloads.
 - Renderer pages use restrictive CSP; unexpected navigation, new windows and runtime permission requests are denied.
 - External browser opening is limited to fixed application-owned support destinations.
+- GitHub authentication is delegated to GitHub CLI; the Hub does not request, persist or export GitHub access tokens.
+- New project creation only executes fixed Git / GitHub CLI commands from validated fields; the renderer cannot provide an arbitrary command.
