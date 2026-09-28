@@ -304,3 +304,54 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+
+input[type="checkbox"] {
+  width: auto;
+  accent-color: #dce5f4;
+}
+
+.inline-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.settings-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.setting-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 12px;
+  border: 1px solid #29303b;
+  border-radius: 10px;
+  background: #0e1218;
+  padding: 13px 14px;
+  cursor: pointer;
+}
+
+.setting-row span {
+  display: grid;
+  gap: 4px;
+}
+
+.setting-row small {
+  color: #7f8998;
+  line-height: 1.45;
+}
+
+.danger {
+  border-color: #5f3939;
+  color: #e1b0b0;
+}
+
+.danger:hover {
+  background: #251717;
+}
