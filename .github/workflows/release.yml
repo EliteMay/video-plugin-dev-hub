@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   publish:
@@ -67,6 +69,12 @@ jobs:
           if (-not $latest) { throw "latest.yml was not generated." }
 
           Write-Host "Release files are complete."
+
+      - name: Attest Windows installer
+        if: steps.release_check.outputs.exists != 'true'
+        uses: actions/attest@v4
+        with:
+          subject-path: 'dist/*setup.exe'
 
       - name: Publish GitHub Release
         if: steps.release_check.outputs.exists != 'true'
