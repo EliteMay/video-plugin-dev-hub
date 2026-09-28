@@ -355,3 +355,83 @@ input[type="checkbox"] {
 .danger:hover {
   background: #251717;
 }
+
+
+select {
+  border: 1px solid #2d3440;
+  border-radius: 9px;
+  background: #0d1117;
+  color: #edf1f7;
+  padding: 10px 11px;
+  outline: none;
+}
+
+select:focus {
+  border-color: #59677c;
+}
+
+.github-readiness {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 13px 14px;
+  border: 1px solid #29313d;
+  border-radius: 10px;
+  background: #0e1218;
+}
+
+.github-readiness > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.inline-actions.compact {
+  margin-top: 0;
+}
+
+.wizard-note {
+  display: grid;
+  gap: 5px;
+  margin-top: 14px;
+  padding: 12px 13px;
+  border: 1px solid #2b3340;
+  border-radius: 10px;
+  background: #10151c;
+}
+
+.wizard-note span {
+  color: #8792a2;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.new-project-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 820px) {
+  .new-project-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .new-project-grid .wide {
+    grid-column: auto;
+  }
+
+  .github-readiness {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+.share-row:has(#chatgptCreateProjectButton:not(.hidden)) {
+  grid-template-columns: minmax(240px, 1fr) auto auto;
+}
+
+@media (max-width: 760px) {
+  .share-row:has(#chatgptCreateProjectButton:not(.hidden)) {
+    grid-template-columns: 1fr;
+  }
+}
