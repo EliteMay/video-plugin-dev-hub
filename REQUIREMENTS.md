@@ -23,6 +23,19 @@ Video Plugin Dev Hub manages the AviUtl2 plugin development loop from one Window
 9. Foundation-based new plugin wizard
 10. CI / package / release gate
 
+## New plugin wizard requirements
+
+- Projectが0件でも「新規作成」から開始できる
+- GitHub CLIの導入 / 認証状態をHub内で確認できる
+- GitHub認証TokenをHub自身では保存・読取しない
+- Plugin名、Repository名、種類、公開設定、PC保存先を指定できる
+- `EliteMay/aviutl-plugin-foundation` を取得し、Foundation Version / Commitを記録する
+- `plugin-project.json` と初期Roadmapを生成する
+- GitHub Repository作成、初回Commit / Push、Hub登録まで1操作で完了する
+- 作成したRepositoryを自動で信頼済みにしない
+- 作成途中で失敗した場合、既存Repositoryや他のFolderを削除しない
+- Projectが0件のChatGPT連携画面から新規作成へ移動できる
+
 ## Desktop foundation requirements
 
 - Dark mode by default
