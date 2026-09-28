@@ -33,6 +33,12 @@ let activeVerification = null;
 const chatgptProjectSelect = document.querySelector("#chatgptProjectSelect");
 const createSharePackButton = document.querySelector("#createSharePack");
 const sharePackMessage = document.querySelector("#sharePackMessage");
+const settingsPanel = document.querySelector("#settingsPanel");
+const startupUpdateCheck = document.querySelector("#startupUpdateCheck");
+const settingsMessage = document.querySelector("#settingsMessage");
+const diagnosticsMessage = document.querySelector("#diagnosticsMessage");
+const downloadUpdateButton = document.querySelector("#downloadUpdateButton");
+const installUpdateButton = document.querySelector("#installUpdateButton");
 
 function errorText(error) {
   const messages = {
@@ -565,6 +571,42 @@ async function renderEnvironment() {
     : "AviUtl2 Plugin開発に必要な基本環境を確認できました。";
 }
 
+async function renderSettings() {
+  const current = await window.hub.getSettings();
+  startupUpdateCheck.checked = current?.update?.checkOnStartup !== false;
+  settingsMessage.textContent = "";
+}
+
+async function renderDiagnostics() {
+  const data = await window.hub.getDiagnostics();
+  diagnosticsText.textContent = JSON.stringify(data, null, 2);
+  diagnostics.classList.remove("hidden");
+  diagnostics.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function applyUpdateState(state = {}) {
+  const type = state.type ?? "idle";
+  downloadUpdateButton.classList.toggle("hidden", !["available", "downloading"].includes(type));
+  installUpdateButton.classList.toggle("hidden", type !== "downloaded");
+  downloadUpdateButton.disabled = type === "downloading";
+  downloadUpdateButton.textContent = type === "downloading"
+    ? "ダウンロード中…"
+    : "更新をダウンロード";
+
+  const labels = {
+    idle: "",
+    checking: "更新を確認しています…",
+    current: "最新版です。",
+    available: "新しいバージョン " + (state.version ?? "") + " があります。",
+    downloaded: "更新の準備ができました。再起動すると適用します。",
+    error: "更新処理に失敗しました。Releaseページから手動更新もできます。"
+  };
+
+  updateStatus.textContent = type === "downloading"
+    ? "更新をダウンロードしています… " + (state.percent ?? 0) + "%"
+    : (labels[type] ?? type);
+}
+
 async function init() {
   const status = await window.hub.getStatus();
   version.textContent = "v" + status.appVersion;
@@ -575,6 +617,9 @@ async function init() {
   await renderEnvironment();
   await renderTestEnvironments();
   await renderProjects();
+  await renderSettings();
+  const updater = await window.hub.getUpdateState();
+  if (updater?.ok) applyUpdateState(updater.state);
 }
 
 document.querySelector("#closeVerification").addEventListener("click", () => {
@@ -729,14 +774,60 @@ document.querySelector("#cloneProject").addEventListener("click", async () => {
 });
 
 document.querySelector("#diagnosticsButton").addEventListener("click", async () => {
-  const data = await window.hub.getDiagnostics();
-  diagnosticsText.textContent = JSON.stringify(data, null, 2);
-  diagnostics.classList.remove("hidden");
-  diagnostics.scrollIntoView({ behavior: "smooth" });
+  await renderDiagnostics();
 });
 
 document.querySelector("#closeDiagnostics").addEventListener("click", () => {
   diagnostics.classList.add("hidden");
+});
+
+document.querySelector("#settingsButton").addEventListener("click", async () => {
+  await renderSettings();
+  settingsPanel.classList.remove("hidden");
+  settingsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+document.querySelector("#closeSettings").addEventListener("click", () => {
+  settingsPanel.classList.add("hidden");
+});
+
+document.querySelector("#saveSettings").addEventListener("click", async () => {
+  settingsMessage.textContent = "保存しています…";
+  const result = await window.hub.updateSettings({
+    update: { checkOnStartup: startupUpdateCheck.checked }
+  });
+  settingsMessage.textContent = result?.ok ? "設定を保存しました。" : errorText(result?.error);
+});
+
+document.querySelector("#openDataFolder").addEventListener("click", async () => {
+  const result = await window.hub.openDataFolder();
+  if (!result?.ok) settingsMessage.textContent = "データフォルダを開けませんでした。";
+});
+
+document.querySelector("#openLogFolderFromSettings").addEventListener("click", async () => {
+  const result = await window.hub.openLogFolder();
+  if (!result?.ok) settingsMessage.textContent = "ログフォルダを開けませんでした。";
+});
+
+document.querySelector("#exportDiagnostics").addEventListener("click", async () => {
+  diagnosticsMessage.textContent = "診断情報を書き出しています…";
+  const result = await window.hub.exportDiagnostics();
+  diagnosticsMessage.textContent = result?.ok
+    ? "診断情報を書き出しました: " + result.fileName
+    : "診断情報を書き出せませんでした。";
+});
+
+document.querySelector("#openLogFolder").addEventListener("click", async () => {
+  const result = await window.hub.openLogFolder();
+  if (!result?.ok) diagnosticsMessage.textContent = "ログフォルダを開けませんでした。";
+});
+
+document.querySelector("#clearDiagnostics").addEventListener("click", async () => {
+  const confirmed = window.confirm("診断ログを消去します。Projectや設定は削除しません。続けますか？");
+  if (!confirmed) return;
+  const result = await window.hub.clearDiagnostics();
+  diagnosticsMessage.textContent = result?.ok ? "診断ログを消去しました。" : "診断ログを消去できませんでした。";
+  if (result?.ok) await renderDiagnostics();
 });
 
 document.querySelector("#updateButton").addEventListener("click", async () => {
@@ -750,6 +841,34 @@ document.querySelector("#updateButton").addEventListener("click", async () => {
   }
 });
 
+downloadUpdateButton.addEventListener("click", async () => {
+  downloadUpdateButton.disabled = true;
+  updateStatus.textContent = "更新のダウンロードを開始します…";
+  const result = await window.hub.downloadUpdate();
+  if (!result?.ok) {
+    downloadUpdateButton.disabled = false;
+    updateStatus.textContent =
+      result?.reason === "offline" ? "オフラインのためダウンロードできません。" :
+      "更新をダウンロードできませんでした。";
+  }
+});
+
+installUpdateButton.addEventListener("click", async () => {
+  const confirmed = window.confirm("アプリを再起動して更新を適用します。続けますか？");
+  if (!confirmed) return;
+  installUpdateButton.disabled = true;
+  updateStatus.textContent = "再起動して更新します…";
+  const result = await window.hub.installUpdate();
+  if (!result?.ok) {
+    installUpdateButton.disabled = false;
+    updateStatus.textContent = "更新を適用できませんでした。";
+  }
+});
+
+document.querySelector("#releasePageButton").addEventListener("click", async () => {
+  await window.hub.openReleasePage();
+});
+
 window.hub.onRuntimeExit(async (state) => {
   const exit = state.cleanExit ? "正常終了" : "終了コード " + (state.exitCode ?? "不明");
   const short = state.shortRun ? " / 短時間終了" : "";
@@ -760,13 +879,7 @@ window.hub.onRuntimeExit(async (state) => {
 });
 
 window.hub.onUpdateStatus((state) => {
-  const map = {
-    checking: "更新を確認しています…",
-    current: "最新版です。",
-    available: "新しいバージョン " + state.version + " があります。",
-    error: "更新確認に失敗しました。"
-  };
-  updateStatus.textContent = map[state.type] ?? state.type;
+  applyUpdateState(state);
 });
 
 init().catch(error => {
