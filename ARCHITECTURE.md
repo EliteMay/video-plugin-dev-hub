@@ -4,9 +4,9 @@
 
 ```text
 Renderer
-  │ narrow IPC
+  │ narrow IPC + sender / payload validation
 Preload
-  │
+  │ contextBridge capability surface
 Main Process
   ├ ProjectRegistry
   ├ GitService
@@ -38,6 +38,7 @@ hub-data/
 ├ install-manifests/
 ├ screenshots/
 ├ chatgpt-packs/
+├ diagnostics/
 └ logs/
 ```
 
@@ -50,3 +51,8 @@ Repository, build, install, runtime, verification and release states are separat
 ## Future adapters
 
 Target-specific behavior is isolated behind an AviUtl2 adapter so another video editor can be added later without rewriting Git, evidence and desktop foundation logic.
+
+
+## Desktop security boundary
+
+The BrowserWindow uses context isolation, sandboxing and no Node integration. Privileged IPC is accepted only from the current application renderer, unexpected navigation/new windows are denied, and runtime permission requests default to deny. The renderer receives only explicit preload capabilities.

@@ -3,7 +3,12 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("hub", {
   getStatus: () => ipcRenderer.invoke("hub:get-status"),
   getDiagnostics: () => ipcRenderer.invoke("hub:get-diagnostics"),
+  exportDiagnostics: () => ipcRenderer.invoke("hub:export-diagnostics"),
+  clearDiagnostics: () => ipcRenderer.invoke("hub:clear-diagnostics"),
+  openLogFolder: () => ipcRenderer.invoke("hub:open-log-folder"),
+  openDataFolder: () => ipcRenderer.invoke("hub:open-data-folder"),
   getSettings: () => ipcRenderer.invoke("hub:get-settings"),
+  updateSettings: (value) => ipcRenderer.invoke("hub:update-settings", value),
   getEnvironment: () => ipcRenderer.invoke("hub:get-environment"),
   chooseAviUtl2: () => ipcRenderer.invoke("hub:choose-aviutl2"),
   listTestEnvironments: () => ipcRenderer.invoke("hub:list-test-environments"),
@@ -35,7 +40,12 @@ contextBridge.exposeInMainWorld("hub", {
   saveProject: (projectId, message) => ipcRenderer.invoke("hub:save-project", projectId, message),
   createSharePack: (projectId, environmentId) =>
     ipcRenderer.invoke("hub:create-chatgpt-pack", projectId, environmentId),
+  getUpdateState: () => ipcRenderer.invoke("hub:get-update-state"),
   checkForUpdates: () => ipcRenderer.invoke("hub:check-for-updates"),
+  downloadUpdate: () => ipcRenderer.invoke("hub:download-update"),
+  installUpdate: () => ipcRenderer.invoke("hub:install-update"),
+  openReleasePage: () => ipcRenderer.invoke("hub:open-release-page"),
+  reloadRenderer: () => ipcRenderer.invoke("hub:reload-renderer"),
   onRuntimeExit: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on("hub:runtime-exit", listener);

@@ -21,6 +21,7 @@ import { getInstallState, installArtifact, rollbackInstall, uninstallManagedFile
 import { launchAviUtl2 } from "./core/runtime.mjs";
 import { getTaskVerification, loadVerification, saveVerification, updateTaskVerification } from "./core/verification.mjs";
 import { createHandoffPack } from "./core/handoff-pack.mjs";
+import { sanitizeValue } from "./core/handoff.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 nativeTheme.themeSource = "dark";
@@ -39,7 +40,39 @@ let trustStore;
 let environmentsPath;
 let environmentStore;
 let logger;
+let dataRoot;
 const runtimeProcesses = new Map();
+let updateState = { type: "idle", version: null, percent: null };
+
+function isTrustedIpcEvent(event) {
+  return Boolean(
+    mainWindow &&
+    !mainWindow.isDestroyed() &&
+    event?.sender === mainWindow.webContents
+  );
+}
+
+function isPayloadSizeSafe(args) {
+  try {
+    return Buffer.byteLength(JSON.stringify(args ?? []), "utf8") <= 64 * 1024;
+  } catch {
+    return false;
+  }
+}
+
+function handleIpc(channel, handler) {
+  ipcMain.handle(channel, async (event, ...args) => {
+    if (!isTrustedIpcEvent(event)) {
+      logger?.write("warn", "Rejected IPC sender", { channel });
+      return { ok: false, error: "IPC_SENDER_REJECTED" };
+    }
+    if (!isPayloadSizeSafe(args)) {
+      logger?.write("warn", "Rejected oversized IPC payload", { channel });
+      return { ok: false, error: "IPC_PAYLOAD_TOO_LARGE" };
+    }
+    return handler(event, ...args);
+  });
+}
 
 function clampWindow(win) {
   const bounds = win.getBounds();
@@ -54,8 +87,14 @@ function clampWindow(win) {
 }
 
 function sendUpdateStatus(type, extra = {}) {
+  updateState = {
+    type,
+    version: extra.version ?? updateState.version ?? null,
+    percent: extra.percent ?? null,
+    ...extra
+  };
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send("hub:update-status", { type, ...extra });
+    mainWindow.webContents.send("hub:update-status", updateState);
   }
 }
 
@@ -80,6 +119,18 @@ function createWindow() {
 
   clampWindow(mainWindow);
   if (w.maximized) mainWindow.maximize();
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    const currentUrl = mainWindow.webContents.getURL();
+    if (url !== currentUrl) {
+      event.preventDefault();
+      logger.write("warn", "Blocked renderer navigation", { target: "<blocked>" });
+    }
+  });
+  mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false);
+  });
+
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
   mainWindow.once("ready-to-show", () => mainWindow.show());
 
@@ -111,7 +162,7 @@ app.on("second-instance", () => {
 });
 
 app.whenReady().then(() => {
-  const dataRoot = path.join(app.getPath("userData"), "hub-data");
+  dataRoot = path.join(app.getPath("userData"), "hub-data");
   fs.mkdirSync(dataRoot, { recursive: true });
   settingsPath = path.join(dataRoot, "settings.json");
   projectsPath = path.join(dataRoot, "projects.json");
@@ -130,42 +181,113 @@ app.whenReady().then(() => {
   autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.on("checking-for-update", () => sendUpdateStatus("checking"));
   autoUpdater.on("update-available", info => sendUpdateStatus("available", { version: info.version }));
-  autoUpdater.on("update-not-available", () => sendUpdateStatus("current"));
+  autoUpdater.on("update-not-available", () => sendUpdateStatus("current", { version: app.getVersion() }));
+  autoUpdater.on("download-progress", progress => sendUpdateStatus("downloading", {
+    version: updateState.version,
+    percent: Math.max(0, Math.min(100, Math.round(progress.percent ?? 0))),
+    transferred: progress.transferred ?? null,
+    total: progress.total ?? null
+  }));
+  autoUpdater.on("update-downloaded", info => sendUpdateStatus("downloaded", {
+    version: info.version,
+    percent: 100
+  }));
   autoUpdater.on("error", error => {
     logger.write("error", "Updater error", { message: error.message });
     sendUpdateStatus("error", { message: error.message });
   });
 
-  if (app.isPackaged) {
+  if (app.isPackaged && settings.update?.checkOnStartup !== false) {
     setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 3000);
   }
 });
 
-ipcMain.handle("hub:get-status", async () => ({
+handleIpc("hub:get-status", async () => ({
   appVersion: app.getVersion(),
   online: net.isOnline(),
   theme: nativeTheme.shouldUseDarkColors ? "dark" : "light",
   gitVersion: await getGitVersion()
 }));
 
-ipcMain.handle("hub:get-diagnostics", async () => ({
-  app: { name: app.getName(), version: app.getVersion(), packaged: app.isPackaged },
-  runtime: { electron: process.versions.electron, node: process.versions.node, chrome: process.versions.chrome },
-  os: { platform: process.platform, arch: process.arch, release: process.getSystemVersion() },
-  network: { online: net.isOnline() },
-  git: { version: await getGitVersion() },
-  projects: { count: projectStore.projects.length },
-  testEnvironments: { count: environmentStore.environments.length },
-  storage: { userData: "<redacted-userData>", settingsReadable: Boolean(settings) }
-}));
+async function collectDiagnostics() {
+  return sanitizeValue({
+    schemaVersion: 1,
+    capturedAt: new Date().toISOString(),
+    app: { name: app.getName(), version: app.getVersion(), packaged: app.isPackaged },
+    runtime: { electron: process.versions.electron, node: process.versions.node, chrome: process.versions.chrome },
+    os: { platform: process.platform, arch: process.arch, release: process.getSystemVersion() },
+    network: { online: net.isOnline() },
+    git: { version: await getGitVersion() },
+    update: updateState,
+    settings: {
+      schemaVersion: settings?.schemaVersion ?? null,
+      update: settings?.update ?? null
+    },
+    projects: { count: projectStore.projects.length },
+    testEnvironments: {
+      count: environmentStore.environments.length,
+      runningCount: runtimeProcesses.size
+    },
+    storage: {
+      userData: "<redacted-userData>",
+      settingsReadable: Boolean(settings),
+      logBytes: logger?.size?.() ?? 0
+    },
+    recentLogs: logger?.readRecent?.(100) ?? []
+  });
+}
 
-ipcMain.handle("hub:get-settings", () => settings);
+handleIpc("hub:get-diagnostics", async () => collectDiagnostics());
 
-ipcMain.handle("hub:get-environment", async () => {
+handleIpc("hub:export-diagnostics", async () => {
+  const directory = path.join(dataRoot, "diagnostics");
+  fs.mkdirSync(directory, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+  const filePath = path.join(directory, "diagnostics-" + stamp + ".json");
+  fs.writeFileSync(filePath, JSON.stringify(await collectDiagnostics(), null, 2), "utf8");
+  shell.showItemInFolder(filePath);
+  logger.write("info", "Diagnostic export created", { fileName: path.basename(filePath) });
+  return { ok: true, fileName: path.basename(filePath) };
+});
+
+handleIpc("hub:clear-diagnostics", async () => {
+  logger.clear();
+  logger.write("info", "Diagnostics cleared");
+  return { ok: true };
+});
+
+handleIpc("hub:open-log-folder", async () => {
+  const error = await shell.openPath(path.dirname(logger.path));
+  return error ? { ok: false, error: "OPEN_PATH_FAILED" } : { ok: true };
+});
+
+handleIpc("hub:open-data-folder", async () => {
+  const error = await shell.openPath(dataRoot);
+  return error ? { ok: false, error: "OPEN_PATH_FAILED" } : { ok: true };
+});
+
+handleIpc("hub:get-settings", () => settings);
+
+handleIpc("hub:update-settings", (_event, patch) => {
+  const checkOnStartup = patch?.update?.checkOnStartup;
+  if (typeof checkOnStartup !== "boolean") {
+    return { ok: false, error: "INVALID_SETTINGS" };
+  }
+  settings = saveSettings(settingsPath, {
+    ...settings,
+    update: {
+      ...settings.update,
+      checkOnStartup
+    }
+  });
+  return { ok: true, settings };
+});
+
+handleIpc("hub:get-environment", async () => {
   return detectDevelopmentEnvironment(settings);
 });
 
-ipcMain.handle("hub:choose-aviutl2", async () => {
+handleIpc("hub:choose-aviutl2", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: "AviUtl2.exeを選択",
     properties: ["openFile"],
@@ -177,7 +299,7 @@ ipcMain.handle("hub:choose-aviutl2", async () => {
   return { ok: true, path: selected, environment: await detectDevelopmentEnvironment(settings) };
 });
 
-ipcMain.handle("hub:list-test-environments", async () => ({
+handleIpc("hub:list-test-environments", async () => ({
   ok: true,
   environments: environmentStore.environments.map(environment => ({
     ...environment,
@@ -186,7 +308,7 @@ ipcMain.handle("hub:list-test-environments", async () => ({
   }))
 }));
 
-ipcMain.handle("hub:create-test-environment", async () => {
+handleIpc("hub:create-test-environment", async () => {
   const detected = await detectDevelopmentEnvironment(settings);
   if (!detected.aviutl2.available) return { ok: false, error: "AVIUTL2_NOT_CONFIGURED" };
 
@@ -204,12 +326,12 @@ ipcMain.handle("hub:create-test-environment", async () => {
   return { ok: true, environment: result.environment };
 });
 
-ipcMain.handle("hub:save-window-preference", (_event, value) => {
+handleIpc("hub:save-window-preference", (_event, value) => {
   settings = saveSettings(settingsPath, { ...settings, ...value });
   return settings;
 });
 
-ipcMain.handle("hub:list-projects", async () => {
+handleIpc("hub:list-projects", async () => {
   const result = [];
   const environment = await detectDevelopmentEnvironment(settings);
   for (const project of projectStore.projects) {
@@ -247,7 +369,7 @@ ipcMain.handle("hub:list-projects", async () => {
   return result;
 });
 
-ipcMain.handle("hub:choose-project-folder", async () => {
+handleIpc("hub:choose-project-folder", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: "Plugin Repositoryフォルダを選択",
     properties: ["openDirectory"]
@@ -256,7 +378,7 @@ ipcMain.handle("hub:choose-project-folder", async () => {
   return result.filePaths[0];
 });
 
-ipcMain.handle("hub:add-project", async (_event, input) => {
+handleIpc("hub:add-project", async (_event, input) => {
   try {
     const project = createProject(input ?? {});
     if (projectStore.projects.some(item => item.id === project.id)) {
@@ -280,13 +402,13 @@ ipcMain.handle("hub:add-project", async (_event, input) => {
   }
 });
 
-ipcMain.handle("hub:inspect-project", async (_event, projectId) => {
+handleIpc("hub:inspect-project", async (_event, projectId) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
   return { ok: true, project, gitState: await inspectRepository(project.localPath) };
 });
 
-ipcMain.handle("hub:clone-project", async (_event, input) => {
+handleIpc("hub:clone-project", async (_event, input) => {
   try {
     const project = createProject(input ?? {});
     if (projectStore.projects.some(item => item.id === project.id)) {
@@ -304,7 +426,7 @@ ipcMain.handle("hub:clone-project", async (_event, input) => {
   }
 });
 
-ipcMain.handle("hub:sync-project", async (_event, projectId) => {
+handleIpc("hub:sync-project", async (_event, projectId) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
   const result = await safeSync(project);
@@ -315,7 +437,7 @@ ipcMain.handle("hub:sync-project", async (_event, projectId) => {
   return result;
 });
 
-ipcMain.handle("hub:set-project-trust", async (_event, projectId, trusted) => {
+handleIpc("hub:set-project-trust", async (_event, projectId, trusted) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
   trustStore = setRepositoryTrust(trustStore, project.repositorySlug, trusted === true);
@@ -326,7 +448,7 @@ ipcMain.handle("hub:set-project-trust", async (_event, projectId, trusted) => {
   return { ok: true, trusted: isRepositoryTrusted(trustStore, project.repositorySlug) };
 });
 
-ipcMain.handle("hub:build-project", async (_event, projectId, configuration) => {
+handleIpc("hub:build-project", async (_event, projectId, configuration) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
 
@@ -387,7 +509,7 @@ ipcMain.handle("hub:build-project", async (_event, projectId, configuration) => 
   return result;
 });
 
-ipcMain.handle("hub:get-build-history", async (_event, projectId) => {
+handleIpc("hub:get-build-history", async (_event, projectId) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
   const safeId = project.id.replace(/[^a-z0-9._-]+/gi, "_");
@@ -395,7 +517,7 @@ ipcMain.handle("hub:get-build-history", async (_event, projectId) => {
   return { ok: true, entries: loadBuildHistory(historyPath).slice(0, 10) };
 });
 
-ipcMain.handle("hub:get-install-state", async (_event, projectId, environmentId) => {
+handleIpc("hub:get-install-state", async (_event, projectId, environmentId) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   const environment = environmentStore.environments.find(item => item.id === environmentId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
@@ -411,7 +533,7 @@ ipcMain.handle("hub:get-install-state", async (_event, projectId, environmentId)
   return { ok: true, state: getInstallState({ installManifestPath }) };
 });
 
-ipcMain.handle("hub:install-latest-build", async (_event, projectId, environmentId) => {
+handleIpc("hub:install-latest-build", async (_event, projectId, environmentId) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   const environment = environmentStore.environments.find(item => item.id === environmentId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
@@ -461,7 +583,7 @@ ipcMain.handle("hub:install-latest-build", async (_event, projectId, environment
   return result;
 });
 
-ipcMain.handle("hub:rollback-install", async (_event, projectId, environmentId) => {
+handleIpc("hub:rollback-install", async (_event, projectId, environmentId) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   const environment = environmentStore.environments.find(item => item.id === environmentId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
@@ -478,7 +600,7 @@ ipcMain.handle("hub:rollback-install", async (_event, projectId, environmentId) 
   return rollbackInstall({ environment, installManifestPath });
 });
 
-ipcMain.handle("hub:uninstall-test-build", async (_event, projectId, environmentId) => {
+handleIpc("hub:uninstall-test-build", async (_event, projectId, environmentId) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   const environment = environmentStore.environments.find(item => item.id === environmentId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
@@ -495,7 +617,7 @@ ipcMain.handle("hub:uninstall-test-build", async (_event, projectId, environment
   return uninstallManagedFiles({ environment, installManifestPath });
 });
 
-ipcMain.handle("hub:launch-test-aviutl2", async (_event, environmentId) => {
+handleIpc("hub:launch-test-aviutl2", async (_event, environmentId) => {
   const environment = environmentStore.environments.find(item => item.id === environmentId);
   if (!environment) return { ok: false, error: "TEST_ENVIRONMENT_NOT_FOUND" };
   if (runtimeProcesses.has(environment.id)) {
@@ -533,13 +655,13 @@ ipcMain.handle("hub:launch-test-aviutl2", async (_event, environmentId) => {
   return { ok: true, pid: launched.pid, startedAt: launched.startedAt };
 });
 
-ipcMain.handle("hub:get-plugin-manifest", async (_event, projectId) => {
+handleIpc("hub:get-plugin-manifest", async (_event, projectId) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
   return { ok: true, manifest: readPluginManifest(project.localPath) };
 });
 
-ipcMain.handle("hub:get-verification", async (_event, projectId, taskKey) => {
+handleIpc("hub:get-verification", async (_event, projectId, taskKey) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
   const roadmap = readRoadmap(project.localPath);
@@ -557,7 +679,7 @@ ipcMain.handle("hub:get-verification", async (_event, projectId, taskKey) => {
   return { ok: true, task, verification: getTaskVerification(store, task) };
 });
 
-ipcMain.handle("hub:save-verification", async (_event, projectId, taskKey, patch, environmentId) => {
+handleIpc("hub:save-verification", async (_event, projectId, taskKey, patch, environmentId) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
   const roadmap = readRoadmap(project.localPath);
@@ -605,7 +727,7 @@ ipcMain.handle("hub:save-verification", async (_event, projectId, taskKey, patch
   return { ok: true, task, verification: getTaskVerification(store, task) };
 });
 
-ipcMain.handle("hub:add-verification-screenshot", async (_event, projectId, taskKey) => {
+handleIpc("hub:add-verification-screenshot", async (_event, projectId, taskKey) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
   const roadmap = readRoadmap(project.localPath);
@@ -653,13 +775,13 @@ ipcMain.handle("hub:add-verification-screenshot", async (_event, projectId, task
   };
 });
 
-ipcMain.handle("hub:get-roadmap", async (_event, projectId) => {
+handleIpc("hub:get-roadmap", async (_event, projectId) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
   return { ok: true, roadmap: readRoadmap(project.localPath), currentTaskKey: project.currentTaskKey ?? null };
 });
 
-ipcMain.handle("hub:set-current-task", async (_event, projectId, taskKey) => {
+handleIpc("hub:set-current-task", async (_event, projectId, taskKey) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
   const roadmap = readRoadmap(project.localPath);
@@ -670,13 +792,13 @@ ipcMain.handle("hub:set-current-task", async (_event, projectId, taskKey) => {
   return { ok: true, task };
 });
 
-ipcMain.handle("hub:preview-save", async (_event, projectId) => {
+handleIpc("hub:preview-save", async (_event, projectId) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
   return previewSave(project);
 });
 
-ipcMain.handle("hub:save-project", async (_event, projectId, commitMessage) => {
+handleIpc("hub:save-project", async (_event, projectId, commitMessage) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
   const result = await saveToGitHub(project, commitMessage);
@@ -687,7 +809,7 @@ ipcMain.handle("hub:save-project", async (_event, projectId, commitMessage) => {
   return result;
 });
 
-ipcMain.handle("hub:create-chatgpt-pack", async (_event, projectId, environmentId) => {
+handleIpc("hub:create-chatgpt-pack", async (_event, projectId, environmentId) => {
   const project = projectStore.projects.find(item => item.id === projectId);
   if (!project) return { ok: false, error: "PROJECT_NOT_FOUND" };
 
@@ -814,10 +936,41 @@ ipcMain.handle("hub:create-chatgpt-pack", async (_event, projectId, environmentI
   return { ok: true, packName: path.basename(packRoot) };
 });
 
-ipcMain.handle("hub:check-for-updates", async () => {
+handleIpc("hub:get-update-state", async () => ({ ok: true, state: updateState }));
+
+handleIpc("hub:check-for-updates", async () => {
   if (!app.isPackaged) return { ok: false, reason: "development" };
   if (!net.isOnline()) return { ok: false, reason: "offline" };
   await autoUpdater.checkForUpdates();
+  return { ok: true };
+});
+
+handleIpc("hub:download-update", async () => {
+  if (!app.isPackaged) return { ok: false, reason: "development" };
+  if (!net.isOnline()) return { ok: false, reason: "offline" };
+  if (updateState.type === "downloaded") return { ok: true, alreadyDownloaded: true };
+  if (updateState.type !== "available" && updateState.type !== "downloading") {
+    return { ok: false, reason: "no-update" };
+  }
+  await autoUpdater.downloadUpdate();
+  return { ok: true };
+});
+
+handleIpc("hub:install-update", async () => {
+  if (!app.isPackaged) return { ok: false, reason: "development" };
+  if (updateState.type !== "downloaded") return { ok: false, reason: "not-downloaded" };
+  setTimeout(() => autoUpdater.quitAndInstall(false, true), 100);
+  return { ok: true };
+});
+
+handleIpc("hub:open-release-page", async () => {
+  await shell.openExternal("https://github.com/EliteMay/video-plugin-dev-hub/releases/latest");
+  return { ok: true };
+});
+
+handleIpc("hub:reload-renderer", async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: "WINDOW_NOT_AVAILABLE" };
+  await mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
   return { ok: true };
 });
 

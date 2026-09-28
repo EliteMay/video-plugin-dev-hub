@@ -12,6 +12,11 @@
 - [x] Renderer recovery
 - [x] Offline/online indicator
 - [x] Stable updater foundation
+- [x] Explicit update download / restart-install flow
+- [x] Settings screen and startup update preference
+- [x] One-click diagnostics export / bounded log controls
+- [x] IPC sender validation / CSP / navigation and permission hardening
+- [x] Renderer recovery reload action
 - [x] Windows installer CI validation
 - [ ] Windows real-machine verification
 

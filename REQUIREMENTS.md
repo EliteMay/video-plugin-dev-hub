@@ -32,7 +32,11 @@ Video Plugin Dev Hub manages the AviUtl2 plugin development loop from one Window
 - Bounded local log
 - Renderer crash recovery
 - Offline state separated from local capabilities
-- Stable GitHub Release updater
+- Stable GitHub Release updater with explicit check → download → restart/install flow and manual Release fallback
+- Settings screen for startup update preference and support folders
+- One-click sanitized diagnostics export, bounded logs and clear/open support actions
+- Renderer IPC sender validation, bounded payloads, restrictive CSP and blocked unexpected navigation
+- Renderer crash recovery with an in-app reload action
 - No invented ETA when progress cannot be measured
 
 ## Safety

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
   <title>Video Plugin Dev Hub</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -18,7 +19,7 @@
         <button class="nav" disabled>開発</button>
         <button class="nav" id="chatgptButton">ChatGPT連携</button>
         <button class="nav" id="diagnosticsButton">診断</button>
-        <button class="nav" disabled>設定</button>
+        <button class="nav" id="settingsButton">設定</button>
       </nav>
       <div class="version" id="version">...</div>
     </aside>
@@ -26,7 +27,7 @@
     <main>
       <header>
         <div>
-          <p class="eyebrow">PHASE 6</p>
+          <p class="eyebrow">DESKTOP FOUNDATION</p>
           <h1>Video Plugin Dev Hub</h1>
           <p class="muted">PluginのBuild・実機確認・Evidence記録までHub内でまとめます。</p>
         </div>
@@ -169,40 +170,73 @@
         <p class="muted" id="sharePackMessage"></p>
       </section>
 
+      <section class="card large hidden" id="settingsPanel">
+        <div class="row">
+          <div>
+            <p class="eyebrow">SETTINGS</p>
+            <h2>設定</h2>
+          </div>
+          <button class="secondary" type="button" id="closeSettings">閉じる</button>
+        </div>
+        <div class="settings-grid">
+          <label class="setting-row">
+            <input type="checkbox" id="startupUpdateCheck">
+            <span>
+              <strong>起動時に更新を確認する</strong>
+              <small>起動をブロックせず、利用可能な更新だけ通知します。</small>
+            </span>
+          </label>
+        </div>
+        <div class="inline-actions">
+          <button class="primary" type="button" id="saveSettings">設定を保存</button>
+          <button class="secondary" type="button" id="openDataFolder">データフォルダを開く</button>
+          <button class="secondary" type="button" id="openLogFolderFromSettings">ログフォルダを開く</button>
+          <span class="muted" id="settingsMessage"></span>
+        </div>
+      </section>
+
       <section class="card large">
         <div class="row">
           <div>
-            <p class="eyebrow">CURRENT TASK</p>
-            <h2>Verification / AI Handoff Foundation</h2>
+            <p class="eyebrow">DESKTOP FOUNDATION</p>
+            <h2>Electron基盤 / Release準備</h2>
           </div>
-          <span class="pill good">実装中</span>
+          <span class="pill good">改善中</span>
         </div>
         <ul class="checks">
           <li>✓ Repository / Git</li>
-          <li>✓ Roadmap</li>
-          <li>✓ AviUtl2環境検出</li>
-          <li>✓ Repository Trust</li>
-          <li>✓ CMake Configure</li>
-          <li>✓ Debug / Release Build</li>
-          <li>✓ Artifact SHA-256</li>
-          <li>✓ Build履歴</li>
-          <li>✓ 分離Test Environment</li>
-          <li>✓ Managed Install / Uninstall</li>
-          <li>✓ Rollback</li>
-          <li>✓ AviUtl2起動監視</li>
-          <li>✓ 手順ごとの確認結果</li>
-          <li>✓ Memo / Screenshot Evidence</li>
-          <li>✓ Commit / Build / Test環境の紐付け</li>
-          <li>○ ChatGPT共有パック</li>
+          <li>✓ Build / Test Environment</li>
+          <li>✓ Verification / ChatGPT共有</li>
+          <li>✓ Settings Backup</li>
+          <li>✓ IPC送信元検証</li>
+          <li>✓ CSP / Navigation保護</li>
+          <li>✓ Diagnostics Export</li>
+          <li>✓ One-click Update</li>
+          <li>○ Windows実機確認</li>
+          <li>○ Phase 7 Release Gate</li>
         </ul>
-        <button class="primary" id="updateButton">Hubの更新を確認</button>
-        <span class="muted" id="updateStatus"></span>
+        <div class="inline-actions">
+          <button class="primary" id="updateButton">Hubの更新を確認</button>
+          <button class="secondary hidden" id="downloadUpdateButton">更新をダウンロード</button>
+          <button class="primary hidden" id="installUpdateButton">再起動して更新</button>
+          <button class="secondary" id="releasePageButton">Releaseページを開く</button>
+          <span class="muted" id="updateStatus"></span>
+        </div>
       </section>
 
       <section class="card large hidden" id="diagnostics">
         <div class="row">
-          <h2>診断</h2>
+          <div>
+            <p class="eyebrow">DIAGNOSTICS</p>
+            <h2>診断</h2>
+          </div>
           <button class="secondary" id="closeDiagnostics">閉じる</button>
+        </div>
+        <div class="inline-actions">
+          <button class="primary" type="button" id="exportDiagnostics">診断情報を書き出す</button>
+          <button class="secondary" type="button" id="openLogFolder">ログフォルダを開く</button>
+          <button class="secondary danger" type="button" id="clearDiagnostics">診断ログを消去</button>
+          <span class="muted" id="diagnosticsMessage"></span>
         </div>
         <pre id="diagnosticsText"></pre>
       </section>
