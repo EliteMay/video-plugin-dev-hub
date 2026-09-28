@@ -29,6 +29,12 @@ The Hub manages repositories, environment checks, builds, test deployment, verif
 - Build success and real AviUtl2 verification are separate states
 - Dark UI is the default
 
+## 新しいPluginを作る
+
+左メニューの **「新規作成」** から、Plugin名・Repository名・種類・保存先を指定して新しいProjectを作成できます。
+
+HubはGitHub CLIの認証を利用し、Foundation取得、初期Roadmap / `plugin-project.json` 生成、GitHub Repository作成、初回Push、Hub登録までまとめて行います。GitHubのTokenをHub自身へ入力・保存する必要はありません。
+
 ## Repositories
 
 - Hub: `EliteMay/video-plugin-dev-hub`
