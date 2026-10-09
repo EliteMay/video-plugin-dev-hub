@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     branches: [main]
+    # A documentation-only push should not start a Windows installer publication.
+    # A package.json version change or code change still triggers the release job.
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.mdx'
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:
